@@ -1,0 +1,111 @@
+/* .custom-bullets li::before {
+    content: '●';
+    /* Bullet symbol */
+    /* margin-right: 10px; */
+    /* Space between bullet and text */
+    /* font-size: 18px;
+    /* Size of the bullet */
+    /* display: inline-block; */
+    /* margin: 0; */
+    /* Align bullets correctly */
+/* } */ */
+
+/* .custom-bullets li:nth-child(1)::before {
+    /* color: #198754; */
+    /* color: black; */
+    /* Color for Active (Green Badge) */
+/* } */
+
+/* .custom-bullets li:nth-child(2)::before { */
+    /* color: #ffc107; */
+    /* Color for Inactive (Yellow Badge) */
+/* } */
+
+/* .custom-bullets li:nth-child(3)::before { */
+    /* color: #dc3545; */
+    /* Color for Sold (Red Badge) */
+/* }  */ */
+/* .custom-bullets li::before {
+    content: '•';
+
+    font-size: 1.2rem;
+    margin-right: 8px;
+
+}
+
+
+.active-status::before {
+    color: #28a745;
+
+}
+
+.inactive-status::before {
+    color: #ffc107;
+
+}
+
+.sold-status::before {
+    color: #dc3545;
+
+} */
+
+.custom-card {
+    background-color: white;
+    min-height: 450px !important;
+    /* Minimize card height */
+}
+.card-color{
+    background-color: white;
+}
+
+.custom-card-body {
+    padding: 20px !important;
+    /* Keep the desired padding */
+}
+
+.custom-canvas {
+    height: 400px !important;
+    /* Set the height for the chart */
+    max-height: 400px !important;
+    /* Ensure it does not exceed this height */
+}
+
+/* Remove border and add bottom border for each item */
+.list-group-item.borderless {
+    border: none;
+    /* Remove default border */
+    border-bottom: 1px solid #e0e0e0;
+    /* Add a thin line under each item */
+}
+
+/* Keep bottom border for the last item */
+.list-group-item.borderless:last-child {
+    border-bottom: 1px solid #e0e0e0;
+    /* Ensure the bottom border remains */
+}
+
+
+.chart-size {
+    max-width: 700px;
+    max-height: 300px;
+}
+
+.agent-box {
+    display: inline-block;
+    background-color: #4CAF50;
+    /* Green color for prominence */
+    color: white;
+    padding: 4px 8px;
+    /* Similar to btn-sm */
+    font-size: 0.875rem;
+    /* Font size for small button */
+    border-radius: 0.25rem;
+    /* Rounded corners */
+    border: 1px solid transparent;
+    cursor: default;
+    /* No pointer cursor */
+    font-weight: bold;
+    text-align: center;
+    margin-right: 8px;
+    /* width: 70px; */
+}

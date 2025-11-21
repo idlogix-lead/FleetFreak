@@ -1,0 +1,49 @@
+<div class="box box-info padding-1">
+    <div class="box-body">
+        <div class="row">
+        <div class="col-md-6">
+            <div class="form-group">
+                <label for="company_id">Company  </label>
+                <div class="input-group"> <span class="input-group-text bg-transparent"><i class='bx bxs-user'></i></span>
+                <input type="text" readonly name="company_id" class="form-control {{($errors->has('company_id') ? ' is-invalid' : '')}}" id="company_id" value="{{auth()->user()->active_company_details()->name}}" autofocus required>
+                {!! $errors->first('company_id', '<div class="invalid-feedback">:message</div>') !!}</div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="form-group">
+                <label for="name">Name</label>
+                <input type="text" placeholder="Name" name="name" class="form-control {{($errors->has('name') ? ' is-invalid' : '')}}" id="name" value="{{$weight->name}}">
+                {!! $errors->first('name', '<div class="invalid-feedback">:message</div>') !!}
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="form-group">
+                <label for="description">Description</label>
+                <input type="text" placeholder="Description" name="description" class="form-control {{($errors->has('description') ? ' is-invalid' : '')}}" id="description" value="{{$weight->description}}">
+                {!! $errors->first('description', '<div class="invalid-feedback">:message</div>') !!}
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="form-group">
+                <label for="company_id">Company Id</label>
+                <input type="text" placeholder="Company Id" name="company_id" class="form-control {{($errors->has('company_id') ? ' is-invalid' : '')}}" id="company_id" value="{{$weight->company_id}}">
+                {!! $errors->first('company_id', '<div class="invalid-feedback">:message</div>') !!}
+            </div>
+        </div>
+
+        </div>
+    </div>
+    <div class="box-footer mt20">
+        @php
+        $model=[
+            'notify_btn' => "Save",
+            'function' => "Save",
+            'body' => 'Please Confirm do you realy want to Save?',
+            'btn-color' => 'primary',
+            'float' => "end mt-2",
+            'id' => "save"
+            ];
+        @endphp
+        @include('partials.modal', ['data'=>$model])
+    </div>
+</div>

@@ -1,0 +1,94 @@
+<div class="box box-info padding-1">
+    <div class="box-body">
+        <div class="row">
+            
+        {{-- <div class="col-md-6">
+            <div class="form-group">
+                <label for="client_id">Client Id</label>
+                <input type="text" placeholder="Client Id" name="client_id" class="form-control {{($errors->has('client_id') ? ' is-invalid' : '')}}" id="client_id" value="{{$productSubCategory->client_id}}">
+                {!! $errors->first('client_id', '<div class="invalid-feedback">:message</div>') !!}
+            </div>
+        </div> --}}
+        <div class="col-md-4">
+            <div class="form-group">
+                <label for="company_id">Company Id</label>
+                <input readonly type="text" placeholder="Company Id" name="company_id" class="form-control {{($errors->has('company_id') ? ' is-invalid' : '')}}" id="company_id" value="{{auth()->user()->active_company_details()->name}}">
+                {!! $errors->first('company_id', '<div class="invalid-feedback">:message</div>') !!}
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="form-group">
+                <label for="name">Name</label>
+                <input type="text" placeholder="Name" name="name" class="form-control {{($errors->has('name') ? ' is-invalid' : '')}}" id="name" value="{{old('name',$productSubCategory->name)}}" autofocus required>
+                {!! $errors->first('name', '<div class="invalid-feedback">:message</div>') !!}
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="form-group">
+                <label for="description">Description</label>
+                <input type="text" placeholder="Description" name="description" class="form-control {{($errors->has('description') ? ' is-invalid' : '')}}" id="description" value="{{old('description',$productSubCategory->description)}}">
+                {!! $errors->first('description', '<div class="invalid-feedback">:message</div>') !!}
+            </div>
+        </div>
+        {{-- <div class="col-md-4">
+            <div class="form-group">
+                <label for="code">Code</label>
+                <input type="text" placeholder="Code" name="code" class="form-control {{($errors->has('code') ? ' is-invalid' : '')}}" id="code" value="{{$productSubCategory->code}}" autofocus>
+                {!! $errors->first('code', '<div class="invalid-feedback">:message</div>') !!}
+            </div>
+        </div> --}}
+        <div class="col-md-4">
+            <div class="form-group">
+                <label for="product_category_id">Product Category</label>
+                <select name="product_category_id" class="form-control red-border-select2 {{ $errors->has('product_category_id') ? ' is-invalid' : '' }}" id="product_category_id" autofocus required>
+                    <option value="">Select Category</option>
+                    @foreach (\App\Models\ProductCategory::allCategory() as $category)
+                        <option value="{{$category->id}}" {{$category->id == $productSubCategory->product_category_id ? 'selected':''}}>{{$category->name}}</option>    
+                    @endforeach
+                </select>
+                {!! $errors->first('product_category_id', '<div class="invalid-feedback">:message</div>') !!}
+            </div>
+        </div>   
+        <div class="col-md-6 my-4">
+            <div class="form-group form-check">
+                <!-- Hidden input to ensure a value is always sent (even when unchecked) -->
+                <input type="hidden" value="0" name="is_active" id="is_active_hidden">
+        
+                <!-- Checkbox input -->
+                <input type="checkbox" value="1" name="is_active" class="form-check-input" id="is_active"
+                    {{ (isset($productSubCategory) && $productSubCategory->is_active === 0) ? '' : 'checked' }}>
+                
+                <!-- Checkbox label -->
+                <label class="form-check-label" for="is_active">Is Active</label>
+            </div>
+        </div>
+        <div class="col-md-4 my-4">
+            <div class="form-group form-check">
+                <input type="hidden" value="0" name="is_default" id="is_default_hidden">
+
+                <input type="checkbox" value="1" name="is_default" class="form-check-input" id="is_default" {{ old('is_default', $productSubCategory->is_default) ? 'checked' : '' }}>
+                <label class="form-check-label" for="is_default">Is Default</label>
+            </div>
+        </div>   
+
+        </div>
+    </div>
+    <div class="box-footer mt20">
+        @php
+        $model=[
+            'notify_btn' => "Save",
+            'function' => "Save",
+            'body' => 'Please Confirm do you realy want to Save?',
+            'btn-color' => 'primary',
+            'float' => "end mt-2",
+            'id' => "save"
+            ];
+        @endphp
+        @include('partials.modal', ['data'=>$model])
+    </div>
+</div>
+<script>
+    $(document).ready(function () {
+        $('#product_category_id').select2();
+    });
+</script>

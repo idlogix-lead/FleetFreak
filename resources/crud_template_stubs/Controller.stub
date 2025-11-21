@@ -1,0 +1,173 @@
+<?php
+
+namespace {{controllerNamespace}};
+
+use {{modelNamespace}}\{{modelName}};
+
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Response;
+use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\Rule;
+use Illuminate\Support\Facades\Session;
+
+/**
+ * Class {{modelName}}Controller
+ * @package App\Http\Controllers
+ */
+class {{modelName}}Controller extends Controller
+{
+    /**
+     * Display a listing of the resource.
+     *
+     * *
+     */
+    public function index()
+    {
+        $breadcrumbs = [
+            [
+                'name'=>"{{modelName}}",
+                'link'=>route("{{modelRoute}}.index"),
+                'active'=>true,
+            ]
+        ];
+        ${{modelNamePluralLowerCase}} = {{modelName}}::paginate();
+
+
+        return view('{{modelView}}.index', compact('{{modelNamePluralLowerCase}}','breadcrumbs'))
+            ->with('i', (request()->input('page', 1) - 1) * ${{modelNamePluralLowerCase}}->perPage());
+    }
+
+    /**
+     * Show the form for creating a new resource.
+     *
+     * *
+     */
+    public function create()
+    {
+        $breadcrumbs = [
+            [
+                'name'=>"{{modelName}}",
+                'link'=>route("{{modelRoute}}.index"),
+                'active'=>false,
+            ],
+            [
+                'name'=>"Create",
+                'link'=>route("{{modelRoute}}.create"),
+                'active'=>true,
+            ]
+        ];
+        ${{modelNameLowerCase}} = new {{modelName}}();
+        return view('{{modelView}}.create', compact('{{modelNameLowerCase}}','breadcrumbs'));
+    }
+
+    /**
+     * Store a newly created resource in storage.
+     *
+     * @param  \Illuminate\Http\Request $request
+     * *
+     */
+    public function store(Request $request)
+    {
+        // Validate the request data
+        $validator = Validator::make($request->all(), {{modelName}}::$rules);
+        if ($validator->fails()) {
+            return back()->with('errors', $validator->errors());
+        }
+        // Update lead attributes with validated data
+        $data = $validator->validated();
+        $data['created_by'] = auth()->user()->id;
+
+        ${{modelNameLowerCase}} = {{modelName}}::create($data);
+
+        return redirect()->route('{{modelRoute}}.index')->with('success', '{{modelName}} created successfully.');
+    }
+
+    /**
+     * Display the specified resource.
+     *
+     * @param  int $id
+     * *
+     */
+    public function show($id)
+    {
+        $breadcrumbs = [
+            [
+                'name'=>"{{modelName}}",
+                'link'=>route("{{modelRoute}}.index"),
+                'active'=>false,
+            ],
+            [
+                'name'=>"Show",
+                'link'=>route("{{modelRoute}}.show",$id),
+                'active'=>true,
+            ]
+        ];
+        ${{modelNameLowerCase}} = {{modelName}}::find($id);
+
+        return view('{{modelView}}.show', compact('{{modelNameLowerCase}}','breadcrumbs'));
+    }
+
+    /**
+     * Show the form for editing the specified resource.
+     *
+     * @param  int $id
+     * *
+     */
+    public function edit($id)
+    {
+        $breadcrumbs = [
+            [
+                'name'=>"{{modelName}}",
+                'link'=>route("{{modelRoute}}.index"),
+                'active'=>false,
+            ],
+            [
+                'name'=>"Edit",
+                'link'=>route("{{modelRoute}}.edit",$id),
+                'active'=>true,
+            ]
+        ];
+        ${{modelNameLowerCase}} = {{modelName}}::find($id);
+
+        return view('{{modelView}}.edit', compact('{{modelNameLowerCase}}','breadcrumbs'));
+    }
+
+    /**
+     * Update the specified resource in storage.
+     *
+     * @param  \Illuminate\Http\Request $request
+     * @param  {{modelName}} ${{modelNameLowerCase}}
+     * *
+     */
+    public function update(Request $request, {{modelName}} ${{modelNameLowerCase}})
+    {
+        // Validate the request data
+        $validator = Validator::make($request->all(), {{modelName}}::$rules);
+        if ($validator->fails()) {
+            return back()->with('errors', $validator->errors());
+        }
+        // Update lead attributes with validated data
+        $data = $validator->validated();
+        $data['updated_by'] = auth()->user()->id;
+
+        ${{modelNameLowerCase}}->update($data);
+
+        return redirect()->route('{{modelRoute}}.index')
+            ->with('success', '{{modelName}} updated successfully');
+    }
+
+    /**
+     * @param int $id
+     * @return \Illuminate\Http\RedirectResponse
+     * @throws \Exception
+     */
+    public function destroy($id)
+    {
+        ${{modelNameLowerCase}} = {{modelName}}::find($id)->delete();
+
+        return redirect()->route('{{modelRoute}}.index')
+            ->with('success', '{{modelName}} deleted successfully');
+    }
+}

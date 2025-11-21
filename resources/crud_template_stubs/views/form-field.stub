@@ -1,0 +1,7 @@
+        <div class="col-md-6">
+            <div class="form-group">
+                <label for="{{column}}">{{title}}</label>
+                <input type="text" placeholder="{{title}}" name="{{column}}" class="form-control {{($errors->has('{{column}}') ? ' is-invalid' : '')}}" id="{{column}}" value="{{${{modelNameLowerCase}}->{{column}}}}">
+                {!! $errors->first('{{column}}', '<div class="invalid-feedback">:message</div>') !!}
+            </div>
+        </div>

@@ -1,0 +1,203 @@
+/* Styling the notification dot */
+.notification-dot {
+    position: absolute;
+    top: 12px;
+    /* Adjust as necessary to place the dot */
+    right: 21px;
+    /* Adjust as necessary to place the dot */
+    width: 7px;
+    height: 7px;
+    background-color: #ff5c6c;
+    border-radius: 100%;
+    display: inline-block;
+    /* animation: blink 1s infinite; Blinking effect */
+}
+
+/* Blinking animation */
+@keyframes blink {
+    0% {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: 0;
+    }
+
+    100% {
+        opacity: 1;
+    }
+}
+
+/* Wave effect */
+.notification-dot::after {
+    content: '';
+    position: absolute;
+    top: -8px;
+    left: -7px;
+    width: 22px;
+    height: 22px;
+    background: rgba(255, 0, 0, 0.3);
+    border-radius: 50%;
+    animation: wave 1.3s infinite ease-out;
+    opacity: 0;
+}
+
+/* Wave animation */
+@keyframes wave {
+    0% {
+        transform: scale(0.5);
+        opacity: 1;
+    }
+
+    100% {
+        transform: scale(1.5);
+        opacity: 0;
+    }
+}
+
+/* Initially hide the dot */
+.notification-dot {
+    display: none;
+}
+
+
+
+.wrap-text {
+    white-space: normal;
+    word-wrap: break-word;
+}
+
+.btn-attractive {
+    justify-content: flex-start !important;
+    display: inline-flex;
+    align-items: center;
+    padding: 5px 10px;
+    background-color: #fbae42;
+    /* Primary button color */
+    color: #ffffff;
+    /* Text color */
+    text-decoration: none;
+    border-radius: 25px;
+    font-size: 16px;
+    font-weight: 600;
+    box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.2);
+    transition: background-color 0.3s ease, box-shadow 0.3s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.btn-attractive svg {
+    margin-right: 8px;
+    transition: transform 0.3s ease;
+}
+
+.btn-attractive:before {
+    content: "";
+    position: absolute;
+    width: 300%;
+    height: 300%;
+    background: rgba(255, 255, 255, 0.15);
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) rotate(45deg);
+    transition: transform 0.3s ease;
+    border-radius: 50%;
+    pointer-events: none;
+    opacity: 0;
+}
+
+.btn-attractive:hover {
+    background-color: #f8a32c;
+    /* Darker shade for hover */
+    /* box-shadow: 0px 6px 12px rgba(0, 0, 0, 0.3);*/
+    color: white;
+}
+
+.btn-attractive:hover:before {
+    transform: translate(-50%, -50%) rotate(45deg) scale(1);
+    opacity: 1;
+}
+
+.btn-attractive:hover svg {
+    transform: translateX(5px);
+    fill: white;
+}
+
+@media (min-width: 100px) {
+    .navbar-expand-lg {
+        flex-wrap: nowrap;
+        justify-content: flex-start;
+    }
+}
+
+.test {
+    position: absolute;
+    right: 0;
+}
+
+.messages-section {
+    margin-bottom: 20px;
+}
+
+.messages-section h6 {
+    font-weight: bold;
+    margin-bottom: 10px;
+}
+
+.list-group-item {
+    padding: 10px 15px;
+    cursor: pointer;
+}
+
+.list-group-item:hover {
+    background-color: #f1f1f1;
+}
+
+/* for btns */
+.btn-custom {
+    padding: 2px 6px;
+    font-size: 12px;
+    margin-right: 5px;
+    width: auto;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    transition: all 0.2s ease-in-out;
+}
+
+.btn-custom:hover {
+    box-shadow: 0 6px 10px rgba(0, 0, 0, 0.15);
+}
+
+.btn-primary-custom {
+    background-color: #007bff;
+    /* Primary color */
+    border-color: #007bff;
+}
+
+.btn-secondary-custom {
+    background-color: #6c757d;
+    /* Secondary color */
+    border-color: #6c757d;
+}
+
+
+.dropdown-item:hover {
+    background-color: #f0f0f0;
+    /* Change this to the desired hover color */
+    color: #000;
+    /* Change this to the desired text color on hover */
+}
+
+.dropdown-item:hover .notify {
+    background-color: #d0d0d0;
+    /* Change this to the desired icon background color on hover */
+    color: #fff;
+    /* Change this to the desired icon color on hover */
+}
+
+.header-icons-style {
+    font-size: 26px;
+    margin-bottom: 40%;
+    padding-left: unset;
+    /* color: #4457c6; */
+    color: #640D5F;
+}

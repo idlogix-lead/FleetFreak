@@ -1,0 +1,123 @@
+.step-indicator {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 20px;
+        padding: 0 20px;
+    }
+
+    .step {
+        width: 45px;
+        height: 45px;
+        border: 2px solid #ccc;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: bold;
+        color: #ccc;
+        transition: background-color 0.3s, color 0.3s;
+        margin: 0 60px;
+        flex-shrink: 0; /* Prevent circles from shrinking */
+         
+        /* Adjust this value to increase/decrease the space */
+    }
+
+    .step.active {
+        /* background-color: #007bff; Change to your primary color */
+        /* background-color: #640D5F; */
+        color: black;
+        border-color: #640D5F;
+        /* Change to your primary color */
+    }
+
+    .step.completed {
+        background-color: #640D5F;
+        /* Change to your success color */
+        color: white;
+        border-color: #640D5F;
+        /* Change to your success color */
+    }
+
+    /* Style for the lines */
+    .step-line {
+        flex: 10;
+        /* Allow line to grow and fill space */
+        height: 2px;
+        /* Thickness of the line */
+        background-color: #ccc;
+        /* Default line color */
+        margin: 20px -50px;
+        /* Space around the line */
+        /* position: relative; Position relative for absolute positioning */
+        /* top: 50%; Align line vertically in the center */
+        /* transform: translateY(-50%); Adjust for exact centering */
+    }
+
+    /* Change line color for active and completed steps */
+    .step.completed+.step-line {
+        background-color: #28a745;
+        /* Line color after completed step */
+    }
+
+    .step.active+.step-line {
+        /* background-color: #007bff; Line color after active step/ */
+        background-color: #640D5F
+    }
+
+    body {
+            background-color: white;
+        }
+
+    .wrapper {
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+    .card {
+        width: 60%;
+        margin: 20px auto;
+        border-radius: 10px;
+        /* box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1); */
+        background-color: white;
+        box-shadow: none;
+        min-height: 300px;
+    }
+
+    .card-body {
+        padding: 30px;
+    }
+
+    h3 {
+        font-weight: 500;
+        /* margin-bottom: 20px; */
+        color: #333;
+    }
+
+    .form-control {
+        border-radius: 8px;
+        box-shadow: none;
+        border: 1px solid #ddd;
+    }
+    .input-group{
+        border-radius: 0px !important;
+    }
+
+    .input-group-text {
+        background-color: #e9ecef;
+        /* border-radius: 8px 0 0 8px; */
+        border: 1px solid #811616;
+    }
+
+    .progress {
+        margin-bottom: 20px;
+    }
+
+    p {
+        font-weight: 200;
+        font-size: small;
+    }
+
+

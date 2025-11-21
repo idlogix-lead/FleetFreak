@@ -1,0 +1,20 @@
+<div class="box box-info padding-1">
+    <div class="box-body">
+        <div class="row">
+            {{form}}
+        </div>
+    </div>
+    <div class="box-footer mt20">
+        @php
+        $model=[
+            'notify_btn' => "Save",
+            'function' => "Save",
+            'body' => 'Please Confirm do you realy want to Save?',
+            'btn-color' => 'primary',
+            'float' => "end mt-2",
+            'id' => "save"
+            ];
+        @endphp
+        @include('partials.modal', ['data'=>$model])
+    </div>
+</div>
