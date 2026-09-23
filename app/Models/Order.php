@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToOrganization;
+use App\Models\Concerns\HasClient;
 use Carbon\Carbon;
 use Exception;
 use Illuminate\Database\Eloquent\Model;
@@ -28,6 +30,7 @@ use Illuminate\Support\Facades\Auth;
  */
 class Order extends BaseModel
 {
+    use BelongsToOrganization, HasClient;
 
     // static $rules = [
     //         'order_no' => 'required|string',
@@ -42,8 +45,19 @@ class Order extends BaseModel
      *
      * @var array
      */
-    // protected $fillable = ['order_no', 'customer_partner_id', 'business_partner_id'];
-    protected $guarded = [];
+    protected $fillable = [
+        'order_no', 'customer_partner_id', 'business_partner_id',
+        'overall_status', 'overall_adult', 'overall_child', 'overall_bags',
+        'booking_amount', 'final_amount', 'reason', 'description',
+        'company_id', 'vehicle_class_id', 'vehicle_model_id',
+        'requirements', 'direction', 'trip_type',
+        'client_id', 'po_reference', 'document_type_id',
+        'date_ordered', 'date_promised', 'partner_location_id',
+        'invoice_location_id', 'invoice_partner_id', 'warehouse_id',
+        'currency', 'payment_term', 'document_action', 'document_status',
+        'price_list', 'price_list_id',
+        'created_by', 'updated_by', 'created_at', 'updated_at',
+    ];
 
     /**
      * @return \Illuminate\Database\Eloquent\Relations\BelongsTo

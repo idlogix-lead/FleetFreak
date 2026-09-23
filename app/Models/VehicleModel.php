@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToOrganization;
 use Illuminate\Database\Eloquent\Model;
 
 /**
@@ -36,8 +37,12 @@ class VehicleModel extends BaseModel
      *
      * @var array
      */
-    // protected $fillable = ['name', 'description'];
-    protected $guarded = [];
+    use BelongsToOrganization;
+
+    protected $fillable = [
+        'name', 'description', 'company_id', 'vehicle_class_id', 'vehicle_company_id',
+        'created_by', 'updated_by', 'created_at', 'updated_at',
+    ];
 
 
     /**

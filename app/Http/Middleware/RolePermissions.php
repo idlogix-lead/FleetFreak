@@ -96,8 +96,14 @@ class RolePermissions
                 return $next($request);
 
             }
-        }catch(\Exception $e){
-            dd($e->getMessage());
+        }catch (\Throwable $e) {
+            report($e);
+
+            if (request()->expectsJson()) {
+                return response()->json(['errors' => ['Permission check failed.']], 403);
+            }
+
+            return redirect()->route('unauthorized');
         }
     }
     // public function handleold(Request $request, Closure $next): Response

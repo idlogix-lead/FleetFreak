@@ -8,6 +8,11 @@ use Illuminate\Http\Request;
 
 class BlogController extends Controller
 {
+    public function __construct()
+    {
+        $this->middleware('auth:sanctum');
+    }
+
     public function api_index(){
         $blog=Blog::get();
         return response()->json(['blog'=>$blog]);

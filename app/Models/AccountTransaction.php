@@ -2,13 +2,22 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToOrganization;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 class AccountTransaction extends BaseModel
 {
     use HasFactory;
-    protected $guarded = [];
+    use BelongsToOrganization;
+
+    protected $fillable = [
+        'transaction_date', 'company_id', 'account_id',
+        'quantity', 'debit', 'credit', 'currency_id',
+        'record_id', 'line_id', 'table_id', 'b_partner_id',
+        'description', 'created_by', 'updated_by',
+        'created_at', 'updated_at',
+    ];
     public function Account()
     {
         return $this->belongsTo(\App\Models\Account::class, 'account_id', 'id');

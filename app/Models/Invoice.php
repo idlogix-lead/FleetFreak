@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToOrganization;
+use App\Models\Concerns\HasClient;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -42,6 +44,8 @@ use Illuminate\Support\Facades\DB;
 class Invoice extends BaseModel
 {
     use SoftDeletes;
+    use BelongsToOrganization;
+    use HasClient;
 
     static $rules = [
         'document_no' => 'required|string',
@@ -63,8 +67,17 @@ class Invoice extends BaseModel
      *
      * @var array
      */
-    // protected $fillable = ['document_no', 'company_id', 'vehicle_id', 'business_partner_id', 'date', 'description', 'total_amount', 'grand_total_amount', 'document_status', 'document_type'];
-    protected $guarded = [];
+    protected $fillable = [
+        'document_no', 'company_id', 'vehicle_id', 'business_partner_id',
+        'date', 'description', 'total_amount', 'grand_total_amount', 'document_status',
+        'created_by', 'updated_by',
+        'document_type_id', 'start_time', 'end_time',
+        'client_id', 'order_id', 'date_ordered', 'is_active', 'date_invoiced', 'account_date',
+        'user_id', 'partner_location_id', 'currency', 'company_agent',
+        'discount_printed', 'payment_rule', 'payment_term', 'is_pay_schedule_valid',
+        'document_action', 'material_inout_id', 'price_list_id',
+        'created_at', 'updated_at',
+    ];
 
     /**
      * @return \Illuminate\Database\Eloquent\Relations\BelongsTo

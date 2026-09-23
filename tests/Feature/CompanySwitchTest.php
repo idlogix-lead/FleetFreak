@@ -47,11 +47,7 @@ class CompanySwitchTest extends TestCase
 
     /**
      * Security property: switching to a company the user does NOT belong to must
-     * never result in that company becoming active.
-     *
-     * Note: change_active_company() currently falls through on validation failure
-     * and nulls active_company_id (known defect, queued for Phase 1) — either way
-     * the foreign company must never become active.
+     * be rejected, and the active company must remain untouched.
      */
     public function test_user_cannot_switch_to_a_company_they_do_not_belong_to(): void
     {
@@ -64,10 +60,11 @@ class CompanySwitchTest extends TestCase
             'name' => 'Foreign Company',
         ]);
 
-        $this->actingAs($user)->postJson('/companies/change_active', [
+        $response = $this->actingAs($user)->postJson('/companies/change_active', [
             'company_id' => $foreignCompany->id,
         ]);
 
+        $response->assertStatus(422);
         $this->assertNotEquals(
             $foreignCompany->id,
             $user->fresh()->active_company_id,
@@ -76,7 +73,7 @@ class CompanySwitchTest extends TestCase
         $this->assertEquals(
             $originalActiveCompanyId,
             $user->fresh()->active_company_id,
-            'A failed switch must leave the active company unchanged (current code nulls it — defect tracked for Phase 1).'
+            'A failed switch must leave the active company unchanged.'
         );
     }
 }

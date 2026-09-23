@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToOrganization;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Auth;
@@ -35,6 +36,7 @@ use Illuminate\Support\Facades\Auth;
  */
 class Partner extends BaseModel
 {
+    use BelongsToOrganization;
 
     // static $rules = [
 	// 		'name' => 'required|string',
@@ -57,8 +59,24 @@ class Partner extends BaseModel
      *
      * @var array
      */
-    // protected $fillable = ['name', 'partner_type', 'email', 'phone_no', 'whatsapp_no', 'cnic', 'address1', 'address2', 'address3', 'city', 'country'];
-    protected $guarded = [];
+    /**
+     * Attributes that should be mass-assignable.
+     *
+     * @var array
+     */
+    protected $fillable = [
+        'name', 'employee_type', 'partner_type', 'actor_id', 'business_partner_id', 'company_id',
+        'email', 'passport', 'phone_no', 'whatsapp_no', 'prefix_phone', 'prefix_whatsapp', 'cnic',
+        'age', 'experience', 'akama', 'company_name',
+        'address1', 'address2', 'address3', 'city', 'country',
+        'iata_no', 'govt_license_no', 'source', 'is_system', 'permission_status', 'pass_key',
+        'created_by', 'updated_by',
+        'nic_expiry_date', 'license_country', 'licensee_expiry_date',
+        'emergency_contact_no1', 'emergency_contact_no2', 'emergency_contact_name',
+        'prefix_emergency_contact1', 'prefix_emergency_contact2',
+        'partner_loc_id', 'price_list_id', 'driver_license',
+        'created_at', 'updated_at',
+    ];
 
 
     /**

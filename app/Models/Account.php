@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToOrganization;
 use Illuminate\Database\Eloquent\Model;
 use App\Http\Controllers\AccountController;
 /**
@@ -31,6 +32,7 @@ use App\Http\Controllers\AccountController;
  */
 class Account extends BaseModel
 {
+    use BelongsToOrganization;
 
     static $rules = [
 			'name' => 'required|string',
@@ -50,8 +52,12 @@ class Account extends BaseModel
      *
      * @var array
      */
-    // protected $fillable = ['name', 'code', 'description', 'is_active', 'is_summary', 'company_id', 'account_type_id', 'account_subtype_id'];
-    protected $guarded = [];
+    protected $fillable = [
+        'name', 'code', 'description', 'is_active', 'is_summary',
+        'company_id', 'account_type_id', 'account_subtype_id',
+        'created_by', 'updated_by', 'is_system',
+        'created_at', 'updated_at',
+    ];
 
 
     /**

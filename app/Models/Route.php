@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToOrganization;
 use Illuminate\Database\Eloquent\Model;
 
 /**
@@ -23,6 +24,7 @@ use Illuminate\Database\Eloquent\Model;
  */
 class Route extends BaseModel
 {
+    use BelongsToOrganization;
 
     // static $rules = [
 	// 		'name' => 'required|string',
@@ -39,8 +41,10 @@ class Route extends BaseModel
      *
      * @var array
      */
-
-    protected $guarded = [];
+    protected $fillable = [
+        'name', 'from_loc', 'to_loc', 'distance', 'distance_unit', 'is_flight',
+        'company_id', 'created_by', 'updated_by', 'created_at', 'updated_at',
+    ];
 
     public function fromLoc()
     {

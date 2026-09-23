@@ -2,13 +2,21 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToOrganization;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 class PaymentLine extends BaseModel
 {
     use HasFactory;
-    protected $guarded = [];
+    use BelongsToOrganization;
+
+    protected $fillable = [
+        'order_id', 'order_detail_id', 'payment_header_id', 'company_id',
+        'total_amount', 'transaction_date', 'description',
+        'payment_type', 'reference_no',
+        'created_at', 'updated_at',
+    ];
 
     public function order()
     {

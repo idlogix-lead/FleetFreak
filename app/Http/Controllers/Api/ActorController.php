@@ -15,6 +15,11 @@ use Illuminate\Support\Facades\Validator;
  */
 class ActorController extends Controller
 {
+    public function __construct()
+    {
+        $this->middleware('auth:sanctum');
+    }
+
     /**
      * Display a listing of the resource.
      *
