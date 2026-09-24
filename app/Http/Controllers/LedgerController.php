@@ -699,6 +699,10 @@ class LedgerController extends Controller
         if(auth()->user()->actor_id==2){
             $driverQuery = $request->input('agent');
         }
+        elseif(auth()->user()->actor_id==5){
+            // Drivers only ever see their own ledger; the 'agent' filter is ignored.
+            $driverQuery = auth()->user()->partner_id;
+        }
         // for agent side:
         // else{
         //     $agentQuery = auth()->user()->partner_id;
@@ -807,7 +811,11 @@ class LedgerController extends Controller
         //         $ledgerEntries = DB::select($rawquery);
         // }
         // ----------------------------------------------------
-        if(auth()->user()->actor_id == 2) {
+        // Other non-admin roles have no driver ledger view: empty page, not a 500.
+        $ledgerEntries = new LengthAwarePaginator([], 0, 15, 1, [
+            'path' => LengthAwarePaginator::resolveCurrentPath(),
+        ]);
+        if(auth()->user()->actor_id == 2 || (auth()->user()->actor_id == 5 && $driverQuery)) {
 
             if ($driverQuery || $fromDate || $toDate) {
                 // Opening line summary query before fromDate
@@ -1110,11 +1118,17 @@ class LedgerController extends Controller
         if(auth()->user()->actor_id==2){
             $driverQuery = $request->input('agent');
         }
+        elseif(auth()->user()->actor_id==5){
+            // Drivers only ever export their own ledger; the 'agent' filter is ignored.
+            $driverQuery = auth()->user()->partner_id;
+        }
 
         $fromDate = $request->input('from_date');
         $toDate = $request->input('to_date');
 
-        if(auth()->user()->actor_id == 2) {
+        // Other non-admin roles have no driver ledger: an empty export, not a 500.
+        $ledgerEntries = [];
+        if(auth()->user()->actor_id == 2 || (auth()->user()->actor_id == 5 && $driverQuery)) {
 
             if ($driverQuery || $fromDate || $toDate) {
                 // Opening line summary query before fromDate
