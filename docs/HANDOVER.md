@@ -263,10 +263,63 @@ Deferred by design:
   RoleModule, RolePermission, RolePermissionType, RolePermissionTypeFunction,
   SidebarItems, and most non-Phase-1 models. Mass-assignment hardening for
   these is backlog — do it alongside Phase 3's ModuleRegistrar work.
-- **Dead ledger exports**: `app/Exports/AgentLedgerExport.php` and
-  `app/Exports/DriverLedgerExport.php` import `App\Models\Ledger`, which does
-  not exist — those export routes fatal if ever hit. Repair or remove in
-  Phase 7.
+- **Unregistered RBAC actions — blocked for every user (audit 2026-09-24,
+  backlog, no fix yet).** `RolePermissions` looks up
+  `role_permission_type_functions` by (controller `$role_module_id`, method);
+  a method with no row, and not listed in the controller's `$ignores`, is
+  redirected to `/unauthorized` for **everyone, admins included** (confirmed
+  with real admin requests: `/customers` 200; `/export_customer`,
+  `/export_agent_ledger`, `/export_vehicle` → 302 `/unauthorized`).
+  28 routes in 15 controllers:
+  - **Every Excel export on a module controller (11 routes — a whole class
+    never registered):** `/export_agent` (BusinessAgent), `/export_customer`,
+    `/export_driver`, `/export_agent_ledger` + `/export_driver_ledger`
+    (Ledger), `/export_location`, `/export_ratelist`, `/export_route`,
+    `/export_company` (VehicleCompany), `/export_vehicle`, `/export_models`
+    (VehicleModel). The exports served from `DashboardController` (no
+    module id) are unaffected.
+  - **Web AJAX/helper actions:** `VehicleController@getVehicleClassDetails`
+    (`POST /get-vehicle-class-details`), `VehicleController@get_time_logs`
+    (`/fetch-timelogs`), `DriverAssignmentController@completedRidesUpdate`
+    (`POST /driver_assignments/completed_rides`),
+    `RoleModuleController@delete_row` (`DELETE /delete-row/{id}`).
+  - **Mobile API actions:** `Api\AdminOrderController` `api_store_draft`,
+    `currentorders`; `Api\OrderController` `api_store_draft`,
+    `api_login_partner_orders`, `currentorders`,
+    `updateOrderStatusnotification`; `Api\DriverAssignmentController`
+    `api_ridelist`, `ride_assign_to_driver_completed`,
+    `ride_assign_to_driver_unapproved`, `update_ride_status` (its URI contains
+    a literal `{$rideId}`), `get_time_logs`, `store_time_logs`,
+    `admin_index`. Check with the app owners which of these the mobile apps
+    actually call before registering them.
+  - Fix = seed the missing function rows (or add keyed `$ignores`) — decide
+    per action which permission type (read/export/…) should grant it.
+  - Not a gap: 40 routes the **admin** role cannot use are deliberate —
+    RoleModules/Actors/AccountTypes/InvoiceDocumentType are Super-Admin-only;
+    AgentOrders (web + `Api\OrderController` CRUD) is agent-only.
+  - Note: the `App\Models\Ledger` import in `AgentLedgerExport` /
+    `DriverLedgerExport` is unused and harmless — earlier "dead export" claim
+    was wrong; the RBAC gap above is the real reason exports fail.
+- **Backlog — convert the 9 ledger UNION queries to `fromSub()`**
+  (`LedgerController` index×2, export×2, driver_ledger, driver_export;
+  `Api\LedgerController` api_index×2, driver_ledger). All 9 bind correctly
+  today (verified 2026-09-24: 18/18 bindings, every company slot = active
+  company, clean PG runs) via the bypass + explicit
+  `OrganizationAccess::companyId()` workaround, so this is a consistency
+  refactor only — deliberately deferred until after Phase 2. Keep super
+  admins pinned to the active company (do not rely on the scope's
+  super-admin neutrality when converting).
+- **QUESTION FOR THE CLIENT — driver ledger only counts rides whose
+  business partner is the driver (pre-existing since `ff32402`; do NOT assume
+  it is deliberate).** The order legs of both the web and API driver ledgers
+  require `orders.business_partner_id = <driver>` in addition to
+  `order_lines.driver_id = <driver>`. Agent-booked rides (business partner =
+  the agent) are the normal flow, so **driver ledgers are empty in
+  practice**; with no driver selected the clause becomes
+  `business_partner_id IS NULL`. Ask what a driver ledger should contain
+  (all rides the driver drove? only driver-sourced rides?) before changing
+  it. Related: the web opening-payments leg filters
+  `payment_headers.agent_id` where the API uses `payment_headers.driver_id`.
 - **Legacy `app/Models/Driver.php`** (no migration; "machine management"
   era) has a fail-open `when($company)`; the table exists only in old SQL
   dumps. Defer or delete during cleanup.

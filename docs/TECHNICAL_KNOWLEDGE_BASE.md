@@ -287,6 +287,7 @@ php artisan test --filter=OrganizationIsolationMatrixTest
 - The bottom half of `routes/web.php` is ~60 static theme-demo routes (`/charts-apex-chart`, `/component-*`…) — leftovers of the Synadmin sample pages.
 - API login's `if ($user->flag)` one-time-password branch is unreachable (after an unconditional `return`).
 - `layouts/app.blade.php`: `charset=iso-8859-1` meta, a Firebase config with **hardcoded keys committed in source** (and a second project's keys in comments), bootstrap CSS loaded twice.
+- **"Ledgers are empty" — already investigated (2026-09-24), NOT a Phase 1 regression.** `/ledgers` and `/ledger/driver_ledger` show nothing until an agent/driver or dates are picked, and they only count order lines with status `completed`/`paid` (agent) or `completed` (driver) inside the date range. The empty result on the dev DB came from its only order line being `incomplete` (ride not yet completed) and dated in the future. Company, agent, customer and driver filters all passed. The driver ledger is additionally empty for agent-booked rides because it requires the order's business partner to be the driver — open client question, see `docs/HANDOVER.md` §5.
 - Git history before the re-architecture program is a single "first commit" (`ff32402`); program work is committed per phase on branch `moeen` (`721f238` Phase 0, `daf4ac3` Phase 1, …). Pre-program archaeology still lives in the `*copy*` files and SQL dumps.
 
 ---
