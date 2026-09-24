@@ -224,7 +224,7 @@ class DashboardController extends Controller
                     DB::raw("'' as tr_date"),
                     DB::raw("'' as tr_no"),
                     DB::raw("'' as description"),
-                    DB::raw("sum(od.rate) as debit"),
+                    DB::raw("sum(NULLIF(od.rate, '')::numeric) as debit"),
                     DB::raw("0 as credit")
                 )
                 ->join('order_lines as od', 'orders.id', '=', 'od.order_id')
@@ -245,7 +245,7 @@ class DashboardController extends Controller
                             DB::raw("'' as tr_no"),
                             DB::raw("'' as description"),
                             DB::raw("0 as debit"),
-                            DB::raw("sum(payment_lines.total_amount) as credit")
+                            DB::raw("sum(NULLIF(payment_lines.total_amount, '')::numeric) as credit")
                         )
                         ->join('payment_lines', 'payment_headers.id', '=', 'payment_lines.payment_header_id')
                         ->when($agentQuery, function ($query) use ($agentQuery) {
@@ -262,10 +262,10 @@ class DashboardController extends Controller
                     'partners.name as agent',
                     'customers.name as customer',
                     DB::raw("'inv' as trtype"),
-                    'order_lines.date as tr_date',
+                    DB::raw("order_lines.date::text as tr_date"),
                     DB::raw("concat(orders.order_no, '-', order_lines.id) as tr_no"),
                     'orders.description as description',
-                    'order_lines.rate as debit',
+                    DB::raw("NULLIF(order_lines.rate, '')::numeric as debit"),
                     DB::raw("0 as credit")
                 )
                 ->join('order_lines', 'orders.id', '=', 'order_lines.order_id')
@@ -285,11 +285,11 @@ class DashboardController extends Controller
                     'agents.name as agent',
                     'customers.name as customer',
                     DB::raw("'pay' as trtype"),
-                    'payment_headers.date as tr_date',
+                    DB::raw("payment_headers.date::text as tr_date"),
                     'payment_headers.payment_no as tr_no',
                     'payment_headers.description as description',
                     DB::raw("0 as debit"),
-                    'payment_lines.total_amount as credit'
+                    DB::raw("NULLIF(payment_lines.total_amount, '')::numeric as credit")
                 )
                 ->join('payment_lines', 'payment_headers.id', '=', 'payment_lines.payment_header_id')
                 ->join('partners as agents', 'payment_headers.agent_id', '=', 'agents.id')
@@ -306,9 +306,11 @@ class DashboardController extends Controller
                 ->unionAll($orderQuery)
                 ->unionAll($paymentQuery);
 
-            // Build the complete query and execute
-            $subquerySql = DB::table(DB::raw("({$combinedQuery->toSql()}) as tmptable"))
-                ->mergeBindings($combinedQuery->getQuery()) // Bind the parameters from the combined query
+            // Build the complete query and execute. fromSub() takes the SQL and
+            // the bindings from the same (organization-scoped) builder; pairing
+            // toSql() with mergeBindings(getQuery()) dropped the first leg's
+            // company_id binding and shifted every later one.
+            $subquerySql = DB::query()->fromSub($combinedQuery, 'tmptable')
                 ->select(
                     'tmptable.agent',
                     'tmptable.customer',
