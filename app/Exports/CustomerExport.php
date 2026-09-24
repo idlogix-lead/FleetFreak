@@ -14,7 +14,14 @@ class CustomerExport implements FromCollection, WithHeadings, WithMapping
     */
     public function collection()
     {
-        return Partner::whereIn('actor_id',[6,8])->get();
+        // Same rows as CustomerController::index: agents only export their own
+        // customers. Organization scoping comes from the Partner global scope.
+        if (auth()->user()->actor_id == 4) {
+            return Partner::checkGlobal(12)->whereIn('actor_id', [6])
+                ->where('business_partner_id', auth()->user()->partner_id)->get();
+        }
+
+        return Partner::checkGlobal(12)->whereIn('actor_id', [6, 8])->get();
     }
     public function map($partner_customer): array
     {

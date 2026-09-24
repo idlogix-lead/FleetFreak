@@ -14,7 +14,8 @@ class VehicleExport implements FromCollection, WithHeadings, WithMapping
     */
     public function collection()
     {
-        return Vehicle::all();
+        // Same rows as VehicleController::index.
+        return Vehicle::checkGlobal(5)->get();
     }
     public function map($vehicle): array
     {

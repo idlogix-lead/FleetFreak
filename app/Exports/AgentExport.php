@@ -14,7 +14,9 @@ class AgentExport implements FromCollection, WithHeadings, WithMapping
     */
     public function collection()
     {
-        return Partner::where('actor_id',4)->get();
+        // Same rows as BusinessAgentController::index (approved agents only).
+        return Partner::checkGlobal(13)->where('actor_id', 4)
+            ->whereHas('users', fn ($q) => $q->where('permission', 1))->get();
     }
     public function map($partner_agent): array
     {

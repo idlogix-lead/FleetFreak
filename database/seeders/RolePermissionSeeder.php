@@ -271,7 +271,14 @@ class RolePermissionSeeder extends Seeder
                 'role_id' => [$superAdminRole->id],
                 'is_report' => false,
                 'use_default_permission_type' => true,
-                'additional_permission_type' => [],
+                'additional_permission_type' => [
+                    'delete' => [
+                        'is_read' => 0,
+                        'methods' => [
+                            'delete_row' => 'json',
+                        ],
+                    ],
+                ],
             ],
             [
                 'module_id' => 4,
@@ -306,6 +313,7 @@ class RolePermissionSeeder extends Seeder
                         'is_read' => 1,
                         'methods' => [
                             'getVehicleLocation' => 'view',
+                            'getVehicleClassDetails' => 'json',
                         ],
                     ],
                     'update' => [
@@ -701,6 +709,12 @@ class RolePermissionSeeder extends Seeder
                         'is_read' => 0,
                         'methods' => [
                             'driver_ledger' => 'view',
+                        ],
+                    ],
+                    'export' => [
+                        'is_read' => 0,
+                        'methods' => [
+                            'driver_export' => 'view',
                         ],
                     ],
                 ],
@@ -1812,7 +1826,11 @@ class RolePermissionSeeder extends Seeder
                 ],
                 'export' => [
                     'is_read' => 0,
-                    'methods' => [],
+                    'methods' => [
+                        // Excel exports; existing databases get this via the
+                        // 2026_09_24_000001 register-rbac-web-actions migration.
+                        'export' => 'view',
+                    ],
                 ],
                 'print' => [
                     'is_read' => 0,

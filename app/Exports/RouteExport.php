@@ -14,7 +14,8 @@ class RouteExport implements FromCollection, WithHeadings, WithMapping
     */
     public function collection()
     {
-        return Route::get();
+        // Same rows as RouteController::index.
+        return Route::checkGlobal(7)->get();
     }
     public function map($route): array
     {
