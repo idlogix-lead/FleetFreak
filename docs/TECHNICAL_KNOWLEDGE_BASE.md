@@ -1,5 +1,7 @@
 # FleetFreak — Technical Knowledge Base
 
+_Updated 2026-09-24 to reflect the post-Phase-1 state (organization isolation). See `docs/HANDOVER.md` for program status._
+
 > **Read this first:** FleetFreak is a **multi-tenant fleet / transport-rental management platform** built as a classic **Laravel 10 monolith** (Blade + jQuery admin UI, Sanctum JSON APIs for three mobile apps). It manages vehicles, drivers, bookings ("orders"/rides), fuel, tolls, maintenance, rentals, customers and agents — and has grown a homegrown **double-entry accounting** and **inventory/procurement (ERP-style)** layer. Previously known as *"Zaroon Transport"* and descended from a *"machine management system"* — old naming still lingers in code and DB dumps.
 
 ---
@@ -14,12 +16,12 @@
 | **Mobile clients** | 3 apps (Agent, Admin, Driver) hitting `routes/api.php` via **Sanctum** tokens |
 | **Auth** | Web: laravel/ui sessions (self-registration disabled → company-onboarding wizard). API: Sanctum + mandatory `firebase_token` (FCM device registration), homegrown OTP password reset |
 | **Permissions** | Fully **custom RBAC** (no spatie/gates): role → module → permission-type → method, enforced by `RolePermissions` middleware; sidebar is DB-driven per role |
-| **Multi-tenancy** | `Client → Company → User`; nearly every business table carries `company_id`; users switch `active_company_id` |
+| **Multi-tenancy** | `Client → Company → User`; nearly every business table carries `company_id`; users switch `active_company_id`. 17 core models are auto-scoped to the active company by the `BelongsToOrganization` global scope. "Organization" in the UI = the `companies` table (§3) |
 | **Core flow** | `Order` → `order_lines` (trip legs) → driver dispatch/ride status → payments + **automatic double-entry journal postings** |
 | **Notifications** | FCM push (Firebase), self-hosted **WhatsApp HTTP gateway**, Mailtrap email, in-app notification table driven by an `events` audit log |
 | **Reporting** | **JasperReports** (PHPJasper, direct DB connection) + **~28 Laravel-Excel export classes** |
 | **Queues** | `QUEUE_CONNECTION=sync` — everything runs inline, no workers. Scheduler runs an email command **every second** |
-| **Tests** | Stock Laravel scaffolding only — zero domain tests |
+| **Tests** | PHPUnit 10.5 suite (16 tests) on the pgsql DB `fleet_freak_testing`: organization-context unit tests, two-org isolation matrix, transactions isolation, company switch, migration-chain sanity, login smoke. Run `php artisan test` (~2–3 min, dominated by the full `DatabaseSeeder`) — see §12 |
 
 ---
 
@@ -56,7 +58,7 @@ fleet_freak (token + topic   gateway       (Mailtrap)    Excel
 
 **Base classes (important):**
 - `app/Models/BaseModel.php` — all models inherit a `static::saved()` hook that **resets the PostgreSQL sequence** (`setval`) after every save. Needed because seeders/imports insert explicit IDs. If you add a model, extend `BaseModel` (or `AuthenticatableModel` for the User-like model) or pgsql IDs will collide.
-- Nearly every model uses `protected $guarded = []` — **mass-assignment is fully open** everywhere.
+- Most models still use `protected $guarded = []` — **mass-assignment is open** — **except** the 17 organization-scoped models (§3), which declare schema-derived `$fillable`. The RBAC/tenancy models (User, Role, Actor, RoleModule, RolePermission*, SidebarItems) are still open; hardening them is Phase 3 backlog.
 
 **Global helpers:** `app/helpers.php` (composer-autoloaded) — currency formatting (`current_currency()`, `apply_currency_symbol/code()`, symbol positioned *after* the amount) and active-nav helpers (`is_active_route`, `active_class`, `show_class`).
 
@@ -64,11 +66,33 @@ fleet_freak (token + topic   gateway       (Mailtrap)    Excel
 
 ## 3. Multi-tenancy & data scoping
 
-- `clients` (tenants) → `companies` → `users` (pivot `user_companies`; `users.active_company_id` selects the working company; switch via `CompanyController::change_active_company`).
+- `clients` (tenants) → `companies` → `users` (pivot `user_companies`; `users.active_company_id` selects the working company; switch via `CompanyController::change_active_company`, which rejects a company the user is not a member of with **422** and leaves the active company unchanged).
+- **Naming:** the level the client calls "Organization" is the existing `companies` table. No DB renames — code keeps `company`; the UI is relabelled progressively; new code uses the `OrganizationContext` layer.
 - Every business table carries `company_id` (+ `created_by`/`updated_by`); newer ERP tables also carry `client_id`.
-- Scoping is **manual**, not global-scope based — controllers filter by company themselves.
 - `users.is_super_admin` bypasses company requirements; `is_company_admin` marks per-company admins.
 - Public signup: `/company_registration` wizard creates Client + Role + User (random password emailed via `RegisterNotification`).
+
+**Organization scoping (Phase 1)** — enforced centrally, not per controller:
+
+- `App\Support\OrganizationContext` resolves the current organization:
+  - `id()` — never throws; the active company, an explicit override, or null.
+  - `idOrThrow()` — **fail-closed**: throws `OrganizationContextMissing` instead of letting a null company turn a query into a cross-tenant read.
+  - `scopeCompanyId()` — used by the global scope: no filter on the console (no auth user) and for `is_super_admin` (platform-operator mode, deliberate); fail-closed for every other authenticated user.
+  - `set()` / `bypass()` / `reset()` — pin, disable or clear the context for CLI commands, seeding and tests.
+  - There is deliberately **no "first company" fallback**.
+- `App\Models\Concerns\BelongsToOrganization` (trait):
+  - a global scope adding `where <table>.company_id = <active company>` to every query;
+  - a `creating` hook that stamps `company_id` from the context — the context wins over any request payload, so a forged form cannot place a record in another organization;
+  - escape hatch `withoutGlobalOrganizationalScope()` — every use should be justified in review.
+- `App\Models\Concerns\HasClient` (trait) stamps `client_id` on create (Order, OrderDetail, Invoice). It intentionally has **no** query scope: isolation is already transitive through company membership.
+- `App\Support\OrganizationAccess::companyId()` / `scopeCompany($query, $column)` — fail-closed helpers for surfaces the global scope cannot reach: `DB::table()` builders, UNION legs, raw report/aggregate queries. They replace the old fail-open `->when($companyId, fn ($q) => $q->where('company_id', $companyId))` idiom.
+- **Scoped models (17):** Partner, Vehicle, VehicleModel, VehicleCompany, VehicleClass, Order, OrderDetail, Invoice, PaymentHeader, PaymentLine, Account, AccountTransaction, GlJournal, Route, RateList, Location, Activity.
+- **Not scoped:**
+  - Tenancy/RBAC tables (`clients`, `companies`, `users`, `user_companies`, `roles`, `role_*`, `sidebar_*`) — deliberate: they *are* the access model.
+  - The 2025-wave ERP/inventory tables (products, price lists, warehouses, material in/out, inventory moves, …) — deferred; add the trait when each module is next worked on.
+  - `gl_journal_lines` has **no `company_id`** — protected only through its scoped parent `gl_journals` (Phase 2 adds the column).
+  - `account_transactions` has no `client_id` (Phase 2).
+  - The legacy `app/Models/Driver.php` (no migration) still filters fail-open.
 
 ---
 
@@ -90,7 +114,7 @@ sidebar_groups ──< sidebar_items  → DB-driven menu, filtered by role
 ```
 
 - Controllers declare `static $role_module_id = N` (+ optional `static $ignores` method whitelist).
-- `RolePermissions` middleware resolves `Controller@method` → `User::role_module_permission_via_method()` → allow / redirect to "unauthorized" / 401 JSON. (It `dd()`s on exceptions — debug leftover.)
+- `RolePermissions` middleware resolves `Controller@method` → `User::role_module_permission_via_method()` → allow / redirect to "unauthorized" / 401 JSON. If the permission check itself throws, the exception is `report()`ed and the request gets a 403 JSON response (API) or a redirect to `unauthorized` (web).
 - Row-level visibility: models expose `scopecheckGlobal($role_module_id)` — unless the role has the "global" permission, queries fall back to `where('created_by', auth()->id())`.
 
 ---
@@ -192,7 +216,7 @@ MaterialInout ──< lines ──> Product / Locator / StockStorage   (ERP)
 
 ## 9. Reporting
 
-- **JasperReports** (`geekcom/phpjasper`): `.jrxml` sources in `storage/app/report/source/MyReports/src/` (users, user_filter, testingusers, `trial_balance_two_column_FF`), compiled via `php artisan jasper:compile` to `.jasper`, executed by `Jasper\JasperController::report()` using a **direct DB connection built from env credentials** (pgsql→postgres driver map), output per client/user under `storage/app/report/output/`, streamed as pdf/xlsx/csv/html. Report-permission check is commented out.
+- **JasperReports** (`geekcom/phpjasper`): `.jrxml` sources in `storage/app/report/source/MyReports/src/` (users, user_filter, testingusers, `trial_balance_two_column_FF`), compiled via `php artisan jasper:compile` to `.jasper`, executed by `Jasper\JasperController::report()` using a **direct DB connection built from env credentials** (pgsql→postgres driver map), output per client/user under `storage/app/report/output/`, streamed as pdf/xlsx/csv/html. `JasperController::report()` is gated by an auth check plus an `ALLOWED_REPORTS` allow-list — the allow-list is the real gate because static dispatch to the `Reports\*ReportController::boot()` sub-controllers bypasses their constructor middleware. Per-report RBAC is Phase 7.
 - **Excel** (`maatwebsite/excel`): ~28 `app/Exports` classes (full-table `FromCollection` dumps) — customers, drivers, vehicles, routes, rate lists, agents, ledgers, and the full order-status matrix (pending/approved/completed/cancelled/unapproved + agent variants), served from `DashboardController` routes. No imports.
 
 ---
@@ -236,14 +260,26 @@ php artisan schedule:work    # needed for registration emails (runs every second
 
 No `npm` step is required — the Mix bundle is unused (see §10). Seeded demo login comes from `RolePermissionSeeder` / `RandomDataSeeder`.
 
+**Tests:**
+
+```bash
+# one-time: create an empty PostgreSQL database named fleet_freak_testing
+php artisan test                                    # full suite, ~2–3 min
+php artisan test --filter=OrganizationIsolationMatrixTest
+```
+
+- Connection settings for the test DB live in `phpunit.xml` (pgsql, `fleet_freak_testing`). Feature tests use `RefreshDatabase` (a `migrate:fresh` of the test DB) and most call `$this->seed()` (the full `DatabaseSeeder`); the seeded web login is `admin@idl.pk`, whose active company is the demo company created by `RolePermissionSeeder`.
+- **Never run `migrate:fresh` (or anything destructive) against the dev DB `fleet_freak`** — only the test harness rebuilds, and only `fleet_freak_testing`.
+
 ---
 
 ## 13. Code health — gotchas a newcomer must know
 
 - **"copy" file debris everywhere:** `routes/web copy.php`, `DashboardController copy 2.php`, `OrderController copy.php`, `InspectionControllerOriginal.php`, `* copy.php` blades, `app/Models/User copy 2.php`, `app/firebase.js` inside the PHP tree — treat them as dead; never edit a `*copy*` file expecting behavior to change.
 - `BulkPayment.php` declares `class DriverAssignment` (duplicate of `DriverAssignment.php`) — same class name in two files.
-- `$guarded = []` on nearly all models — be careful with mass-assignment from user input.
-- `RolePermissions` middleware calls `dd()` in its catch block — exceptions become debug dumps, not 500s.
+- `$guarded = []` on most models (the 17 organization-scoped models are the exception — see §2) — be careful with mass-assignment from user input.
+- **VARCHAR money/number columns** (`order_lines.rate`, `payment_lines.total_amount`, `orders.booking_amount`, `payment_headers.total_amount`, `vehicles.milage`, …): PostgreSQL rejects `SUM(varchar)` (MySQL, the app's original DB, silently cast). Cast explicitly: `NULLIF(col, '')::numeric`. The real fix (`ALTER … TYPE numeric USING …`) is pending a client decision.
+- **Global scopes + `toSql()` / `mergeBindings()`** (the UNION pattern in `LedgerController` / `Api\LedgerController`): global-scope bindings are applied lazily to a clone, so the outer query receives scrambled bindings (e.g. `company_id = '2020-01-01'`). For such legs use `->withoutGlobalOrganizationalScope()` plus an explicit `->where('<table>.company_id', OrganizationAccess::companyId())` on **every** leg.
 - `QUEUE_CONNECTION=sync` + every-second scheduler = notification work (email + WhatsApp HTTP calls) blocks requests inline.
 - Legacy models with no migrations: `drivers`, `driver_assignments`, `payments`, `receipts`, `sales`, `service_providers`… — schema exists only in the SQL dumps in `database/*.sql` (which are per-developer snapshots: `machine_management_system_*.sql`).
 - `vehicle_route_expired` command calls `auth()->user()` — crashes under CLI; `GenerateMaintenanceDocument` never persists anything.
@@ -251,7 +287,7 @@ No `npm` step is required — the Mix bundle is unused (see §10). Seeded demo l
 - The bottom half of `routes/web.php` is ~60 static theme-demo routes (`/charts-apex-chart`, `/component-*`…) — leftovers of the Synadmin sample pages.
 - API login's `if ($user->flag)` one-time-password branch is unreachable (after an unconditional `return`).
 - `layouts/app.blade.php`: `charset=iso-8859-1` meta, a Firebase config with **hardcoded keys committed in source** (and a second project's keys in comments), bootstrap CSS loaded twice.
-- Git history has a single "first commit" — archaeology lives in the `*copy*` files and SQL dumps, not in commits.
+- Git history before the re-architecture program is a single "first commit" (`ff32402`); program work is committed per phase on branch `moeen` (`721f238` Phase 0, `daf4ac3` Phase 1, …). Pre-program archaeology still lives in the `*copy*` files and SQL dumps.
 
 ---
 
@@ -263,6 +299,9 @@ No `npm` step is required — the Mix bundle is unused (see §10). Seeded demo l
 | Trace a booking end-to-end | `app/Http/Controllers/OrderController.php` → `Api/AdminOrderController.php` → `Api/DriverAssignmentController.php` |
 | Change a page | `resources/views/<module>/` (index/create/edit/form/show pattern) + `layouts/app.blade.php` |
 | Understand permissions | `app/Http/Middleware/RolePermissions.php`, `app/Models/User.php::role_module_permission_via_method()`, seeder `RolePermissionSeeder` |
+| Understand organization scoping | `app/Support/OrganizationContext.php`, `app/Support/OrganizationAccess.php`, `app/Models/Concerns/BelongsToOrganization.php`, `app/Models/Concerns/HasClient.php` (§3) |
+| Run / add tests | `tests/Unit`, `tests/Feature`, `phpunit.xml` (§12) |
+| Check ledger integrity | `php artisan accounting:audit [--company=ID]` — read-only: per-company Dr = Cr, per-document balance, traceability of postings to source rows, double-posted documents (`app/Console/Commands/AccountingAudit.php`) |
 | Add a model | extend `BaseModel` (or `AuthenticatableModel`), mind the pgsql sequence hook |
 | Find a scheduled task | `app/Console/Kernel.php` + `app/Console/Commands/` |
 | Notifications / push | `Api/FirebaseController.php`, `Api/WhatsAppController.php`, `app/Models/Notification.php`, `Event::createEvent()` |
