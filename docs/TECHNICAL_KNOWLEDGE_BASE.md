@@ -21,7 +21,7 @@ _Updated 2026-09-24 to reflect the post-Phase-1 state (organization isolation). 
 | **Notifications** | FCM push (Firebase), self-hosted **WhatsApp HTTP gateway**, Mailtrap email, in-app notification table driven by an `events` audit log |
 | **Reporting** | **JasperReports** (PHPJasper, direct DB connection) + **~28 Laravel-Excel export classes** |
 | **Queues** | `QUEUE_CONNECTION=sync` — everything runs inline, no workers. Scheduler runs an email command **every second** |
-| **Tests** | PHPUnit 10.5 suite (16 tests) on the pgsql DB `fleet_freak_testing`: organization-context unit tests, two-org isolation matrix, transactions isolation, company switch, migration-chain sanity, login smoke. Run `php artisan test` (~2–3 min, dominated by the full `DatabaseSeeder`) — see §12 |
+| **Tests** | PHPUnit 10.5 suite (23 tests) on the pgsql DB `fleet_freak_testing`: organization-context unit tests, two-org isolation matrix, transactions isolation, company switch, agent dashboard, driver-ledger access, RBAC web actions/exports, approved orders, migration-chain sanity, login smoke. Run `php artisan test` (~15 min, dominated by re-running the full `DatabaseSeeder`) — see §12 |
 
 ---
 
@@ -116,6 +116,7 @@ sidebar_groups ──< sidebar_items  → DB-driven menu, filtered by role
 - Controllers declare `static $role_module_id = N` (+ optional `static $ignores` method whitelist).
 - `RolePermissions` middleware resolves `Controller@method` → `User::role_module_permission_via_method()` → allow / redirect to "unauthorized" / 401 JSON. If the permission check itself throws, the exception is `report()`ed and the request gets a 403 JSON response (API) or a redirect to `unauthorized` (web).
 - Row-level visibility: models expose `scopecheckGlobal($role_module_id)` — unless the role has the "global" permission, queries fall back to `where('created_by', auth()->id())`.
+- **Every routed controller action must be registered**, or `RolePermissions` redirects **every** user (admins included) to `/unauthorized`: a `role_permission_type_functions` row for (the controller's `$role_module_id`, method) under a permission type the role holds, or a *keyed* entry in the controller's `static $ignores` (`['method' => true]` — the middleware checks `isset($ignores[$method])`). To register an action: add it to `RolePermissionSeeder` (`$defaultPermissionTypes` for all modules, or the module's `additional_permission_type`) **and** ship an idempotent data migration for existing databases — the seeder resets demo users and must not be re-run on a live DB (pattern: `2026_09_24_000001_register_rbac_web_actions.php`). Excel exports belong to the `export` permission type and must return the same rows as the module's list page (same `checkGlobal` / role filters).
 
 ---
 
@@ -270,6 +271,7 @@ php artisan test --filter=OrganizationIsolationMatrixTest
 
 - Connection settings for the test DB live in `phpunit.xml` (pgsql, `fleet_freak_testing`). Feature tests use `RefreshDatabase` (a `migrate:fresh` of the test DB) and most call `$this->seed()` (the full `DatabaseSeeder`); the seeded web login is `admin@idl.pk`, whose active company is the demo company created by `RolePermissionSeeder`.
 - **Never run `migrate:fresh` (or anything destructive) against the dev DB `fleet_freak`** — only the test harness rebuilds, and only `fleet_freak_testing`.
+- Switching users between HTTP requests inside one test: call `$this->flushSession()` before `actingAs($otherUser)` — the web stack's `AuthenticateSession` otherwise logs the new user out (redirect to `/login`) because the session holds the previous user's password hash.
 
 ---
 

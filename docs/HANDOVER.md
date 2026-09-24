@@ -16,7 +16,7 @@ Platform** under an 8-phase program:
 | Phase | Scope | Status |
 |---|---|---|
 | 0 | Baseline + test harness | DONE (commit `721f238`) |
-| 1 | Tenant/organization data isolation | DONE (commit `daf4ac3`) + follow-up WIP (see §3/§4) |
+| 1 | Tenant/organization data isolation | DONE (commit `daf4ac3`) + follow-ups and fixes, all committed (see §2/§3) |
 | 2 | Accounting hardening (posting rules, transactional safety, reversals) | not started |
 | 3 | Asset core (`assets`/`asset_types` wrapper around vehicles) | not started |
 | 4 | Maintenance generalization (plans, usage logs, work orders) | not started |
@@ -59,8 +59,8 @@ Platform** under an 8-phase program:
 
 **Test harness facts:** pgsql test DB `fleet_freak_testing` (creds in
 `phpunit.xml`: postgres @ localhost:5432). Run the suite with
-`php artisan test` (2-3 minutes; dominated by the full `DatabaseSeeder`,
-which includes a 4.2 MB city seeder). Seeded web login: `admin@idl.pk` /
+`php artisan test` (~15 minutes: most feature tests re-run the full
+`DatabaseSeeder`, which includes a 4.2 MB city seeder). Seeded web login: `admin@idl.pk` /
 `00000000` (created by `RolePermissionSeeder`, `active_company_id = 1`).
 PHPUnit 10.5 (was never installed before this program — `phpunit/phpunit`
 is in require-dev).
@@ -69,9 +69,26 @@ is in require-dev).
 
 ## 2. Current state
 
-- Branch: `moeen`. Commit history:
+_Refreshed 2026-09-24 (end of the Phase 1 follow-up session)._
+
+- Branch: `moeen`, working tree clean. Commit history:
   `ff32402` first commit, `c734f18` bootstrap+docs, `721f238` Phase 0,
-  `6e1ab1f` housekeeping, `daf4ac3` Phase 1.
+  `6e1ab1f` housekeeping, `daf4ac3` Phase 1, `0293bc5` handover,
+  `6c43a48` Phase 1 follow-ups (ledger PG fixes, `accounting:audit` checks),
+  `861fa5a` knowledge-base refresh, `3f45c0a` agent-dashboard hotfix,
+  `e1fbae4` approved orders on `/orders`, `67dbf89` driver-ledger non-admin
+  fix, `42096a8` backlog docs, `ba587ca` RBAC web-action registration, then
+  the transactions-test fix + this handover refresh.
+- **Test suite: fully green** — 23 tests (`OrganizationContextTest` ×9,
+  `AgentDashboardTest`, `CompanySwitchTest` ×2, `DriverLedgerAccessTest`,
+  `MigrationSanityTest`, `OrderIndexShowsApprovedTest`,
+  `OrganizationIsolationMatrixTest`, `OrganizationIsolationTransactionsTest`,
+  `RbacWebActionsTest` ×4, `SmokeLoginTest` ×2).
+- **Pending on existing databases:** migration
+  `2026_09_24_000001_register_rbac_web_actions` (additive, idempotent; inserts
+  70 `role_permission_type_functions` rows on the dev DB) must be applied with
+  `php artisan migrate` — check the `migrations` table. Until then the Excel
+  exports still redirect to `/unauthorized` on that database.
 - **NOTHING IS PUSHED.** Origin is
   `https://github.com/idlogix-lead/FleetFreak.git` and denies write access to
   the `moeenidl` account (HTTP 403 on push). The client must grant
@@ -112,13 +129,33 @@ is in require-dev).
   - Tests: `tests/Unit/OrganizationContextTest.php` (9 cases),
     `tests/Feature/OrganizationIsolationMatrixTest.php` (two-org matrix),
     `tests/Feature/CompanySwitchTest.php` (incl. foreign-company rejection).
+- **After Phase 1** (all committed, 2026-09-24):
+  - Agent dashboard (`DashboardController::index`, agent branch): varchar
+    casts + `DB::query()->fromSub()` — the Phase 1 global scope had made
+    `toSql()` + `mergeBindings(getQuery())` drop the first leg's
+    `company_id` binding. `AgentDashboardTest`.
+  - `/orders` lists approved orders with a view-only link;
+    `OrderController::show` renders the order and its lines.
+    `OrderIndexShowsApprovedTest`.
+  - Web driver ledger/export: no more 500 for non-admins — drivers see only
+    their own ledger, other non-admin roles get an empty result.
+    `DriverLedgerAccessTest`.
+  - RBAC: the 11 module-controller Excel exports plus
+    `VehicleController@getVehicleClassDetails` and
+    `RoleModuleController@delete_row` registered (seeder: `export` method in
+    the default `export` permission type, `driver_export` on Ledgers,
+    helpers on Vehicle read / RoleModules delete; migration for existing
+    DBs). Exports now return the same rows as their list pages
+    (`CustomerExport` limits agents to their own customers; `checkGlobal`
+    added to the agent/vehicle/route/rate-list exports) and stay
+    organization-scoped via the model global scope. `RbacWebActionsTest`.
 
 ---
 
-## 3. Work in progress — six Phase 1 follow-up items (UNCOMMITTED)
+## 3. Six Phase 1 follow-up items — COMPLETE (committed)
 
 The client asked for a verification report on six items before Phase 2 starts.
-Status per item, with files touched:
+Status per item:
 
 1. **Non-HTTP contexts — DONE (no code needed).**
    `php artisan schedule:run` executes the every-second email command
@@ -131,7 +168,9 @@ Status per item, with files touched:
 2. **Leak register — DONE.** Verified status of every original item:
    ledger controllers (fixed, see §4), dashboard queries (closed by the
    trait; `account_id=5` removed), all 27 Excel exports (each is backed by a
-   trait-scoped model, so all are scoped — except the two dead ones in §5),
+   trait-scoped model or an explicit company filter, so all are scoped; the
+   11 module-controller exports were additionally unreachable until the RBAC
+   registration in §2),
    Jasper gate, 3 unauthenticated API controllers, middleware `dd()`,
    `AccountController::index`, aggregate endpoints `api_today_total_rides` /
    `api_today_active_rides` (they query `OrderDetail`, which is trait-scoped,
@@ -161,12 +200,13 @@ Status per item, with files touched:
      gates access via the relation. Phase 2 should add `company_id` to
      `gl_journal_lines` and `client_id` to `account_transactions`.
 
-4. **Isolation test extension — PARTIAL (the active work).**
-   File: `tests/Feature/OrganizationIsolationTransactionsTest.php` (NEW).
-   Model-level isolation for Order, OrderDetail, Invoice, PaymentHeader and
-   AccountTransaction across two organizations: PASSING. Customer-export
-   scoping assertion: written but not yet reached in the run. Ledger HTTP
-   check: IN PROGRESS — see §4.
+4. **Isolation test extension — DONE.**
+   `tests/Feature/OrganizationIsolationTransactionsTest.php`: model-level
+   isolation for Order, OrderDetail, Invoice, PaymentHeader and
+   AccountTransaction across two organizations, the `/ledgers` page for both
+   organizations (each sees its own agent, never the other's), and the
+   customer export — all passing. See §4 for why the ledger check first
+   failed.
 
 5. **accounting:audit full output — DONE.**
    `app/Console/Commands/AccountingAudit.php` now performs four checks:
@@ -188,32 +228,12 @@ Status per item, with files touched:
    exist; relevant when Phase 3 introduces a vendor partner type.
    **RBAC `$fillable` — OPEN** (see §5).
 
-**Current `git status` (before this handover commit):**
-
-```
- M .gitignore
- M app/Console/Commands/AccountingAudit.php
- M app/Http/Controllers/AccountController.php
- M app/Http/Controllers/Api/LedgerController.php
- M app/Http/Controllers/LedgerController.php
- M app/Models/VehicleClass.php
-?? tests/Feature/OrganizationIsolationTransactionsTest.php
-```
-
-All of the above is Phase 1 follow-up work, verified green except item 4 —
-the suite currently passes 15 of 16 tests.
-
 ---
 
-## 4. Half-finished
+## 4. Resolved investigations (nothing half-finished — do not redo)
 
-**`tests/Feature/OrganizationIsolationTransactionsTest.php`** still contains
-TEMPORARY DIAGNOSTIC CODE that must be removed before committing:
-`DB::enableQueryLog()` plus a STDERR dump printing the ledger page's
-`<tbody>` region (the last diagnostic added, not yet run).
-
-What the debugging established so far (three REAL pre-existing bugs, all
-fixed in this WIP in `LedgerController` and `Api\LedgerController`):
+**Ledger controllers on PostgreSQL** — three real bugs, fixed in `6c43a48`
+in `LedgerController` and `Api\LedgerController`:
 
 1. **VARCHAR money columns**: `order_lines.rate` and
    `payment_lines.total_amount` are varchar. PostgreSQL rejects
@@ -229,25 +249,28 @@ fixed in this WIP in `LedgerController` and `Api\LedgerController`):
    scrambled bindings (`company_id = '2020-01-01'`). Fixed by calling
    `->withoutGlobalOrganizationalScope()` on every leg and adding an explicit
    `->where('orders.company_id', OrganizationAccess::companyId())` (or
-   `payment_headers.company_id`) per leg. Verified via query log: SQL and
-   bindings are now correct and scoped.
+   `payment_headers.company_id`) per leg. Verified: all 9 ledger UNIONs bind
+   18/18 with every company slot = the active company (2026-09-24 probe).
 
-**The remaining mystery**: with correct SQL and bindings, organization B's
-`/ledgers` page returns 200 and contains NO cross-organization names (so
-isolation holds), but `assertSee('Agent Org B')` fails — the expected row is
-missing from the rendered page. The tbody dump was added to see what the
-table actually renders.
+**The "missing ledger row" in the transactions test** — the fixture orders
+had no customer, and every ledger UNION leg inner-joins
+`partners as customers`, so customer-less orders never reach the ledger
+(pre-existing behaviour; client question in §5). Fixed in the test data only
+(orders now carry customers); the query is unchanged by decision.
 
-**Next actions, in order:**
-1. `php artisan test --filter=OrganizationIsolationTransactionsTest` and read
-   the `=== LEDGER TBODY ===` output.
-2. Resolve why the row is missing (suspects: the `OPN` opening-row special
-   case in the blade, seeder-randomized ids changing fixture relationships,
-   or the union's grouping interacting with the view).
-3. Remove BOTH diagnostic blocks; restore clean assertions
-   (`assertStatus(200)` plus `assertSee`/`assertDontSee` for each user).
-4. Full suite green (expect 16/16), then commit the whole follow-up batch on
-   `moeen` per the standing rule.
+**Agent dashboard outage** — `DashboardController::index` (agent branch,
+`actor_id = 4`) had the same varchar `SUM` (pre-existing, identical at
+`721f238`) plus a Phase 1 regression: `toSql()` applies global scopes but
+`getQuery()` does not, so `mergeBindings(getQuery())` dropped the first leg's
+`company_id` binding (18 placeholders / 17 bindings). Fixed with casts +
+`DB::query()->fromSub()` in `3f45c0a`; verified against a `721f238` worktree.
+
+**"Ledgers are empty" on the dev DB** — NOT a Phase 1 regression: its only
+order line is `incomplete` and dated in the future; the ledgers count only
+`completed`/`paid` lines in the date range (recorded in the knowledge base
+§13).
+
+**RBAC audit** — see §5 (web part fixed; mobile API part open).
 
 ---
 
@@ -263,8 +286,16 @@ Deferred by design:
   RoleModule, RolePermission, RolePermissionType, RolePermissionTypeFunction,
   SidebarItems, and most non-Phase-1 models. Mass-assignment hardening for
   these is backlog — do it alongside Phase 3's ModuleRegistrar work.
-- **Unregistered RBAC actions — blocked for every user (audit 2026-09-24,
-  backlog, no fix yet).** `RolePermissions` looks up
+- **Unregistered RBAC actions (audit 2026-09-24). WEB PART FIXED** — the 11
+  exports and `getVehicleClassDetails` / `delete_row` are registered (see
+  §2). **Still open:** the 13 mobile API actions below (register only after
+  the client/app owners confirm which ones the apps call — registering could
+  change mobile behaviour), and two dead web routes that were deliberately
+  NOT registered: `POST /driver_assignments/completed_rides` →
+  `completedRidesUpdate` does not exist; `GET /fetch-timelogs` →
+  `VehicleController@get_time_logs` ends in a leftover `dd('$data')` and has
+  no caller. Remove both routes (or fix them) during cleanup.
+  Original finding: `RolePermissions` looks up
   `role_permission_type_functions` by (controller `$role_module_id`, method);
   a method with no row, and not listed in the controller's `$ignores`, is
   redirected to `/unauthorized` for **everyone, admins included** (confirmed
@@ -309,6 +340,22 @@ Deferred by design:
   refactor only — deliberately deferred until after Phase 2. Keep super
   admins pinned to the active company (do not rely on the scope's
   super-admin neutrality when converting).
+- **QUESTION FOR THE CLIENT — ledger inner joins hide rows without a
+  customer (pre-existing since `ff32402`; query deliberately unchanged).**
+  Every ledger UNION leg (web `/ledgers` + export, web/API driver ledgers,
+  `Api\LedgerController::api_index`, and the agent dashboard's ledger)
+  inner-joins `partners as customers` on `orders.customer_partner_id` /
+  `payment_headers.customer_id`. But `orders.customer_partner_id` has been
+  nullable since migration `2025_02_03_150517`, every order-creation path
+  validates it as `nullable` (only the web order form marks it HTML
+  `required`), and ride completion copies a missing customer onto the
+  payment header — so completed rides and payments without a customer
+  silently vanish from the ledgers. Related: `Order::store_agent_payment`
+  (Payments screen) never sets `customer_id` and creates no payment lines, so
+  those agent payments never appear in the agent ledger at all. Ask whether
+  customer-less rides/payments must show (then switch those joins to LEFT
+  JOIN) or whether a customer should become mandatory. Impact SQL for a data
+  copy: count orders / payment_headers with no customer per company.
 - **QUESTION FOR THE CLIENT — driver ledger only counts rides whose
   business partner is the driver (pre-existing since `ff32402`; do NOT assume
   it is deliberate).** The order legs of both the web and API driver ledgers
@@ -355,18 +402,25 @@ Behavior changes shipped in Phase 1 (communicate to the client/users):
 - `api_today_total_rides` / `api_today_active_rides` are now
   organization-scoped (numbers get smaller but correct) — inform the mobile
   app owners.
+- The 11 Excel export buttons work again (previously every user, admins
+  included, was redirected to Unauthorized). An agent's customer export now
+  contains only that agent's customers — the same rows as their list page.
+- The web driver ledger no longer errors for non-admins: drivers see their
+  own ledger; other non-admin roles see an empty page.
+- The agent dashboard works again (it errored for every agent login).
 
 ---
 
 ## 6. Next steps for a fresh session
 
 1. Read `docs/TECHNICAL_KNOWLEDGE_BASE.md`, then this document.
-2. Finish §4: run the filtered test, read the tbody diagnostic, resolve the
-   missing ledger row, strip the diagnostic code, get the full suite green.
-3. Commit the follow-up batch (files listed in §3) on `moeen`.
-4. Deliver the six-item follow-up report to the client (§3 is the substance;
-   §5 lists the deferred items to mention).
-5. Start **Phase 2 — accounting hardening** per the plan:
+2. On any existing database, make sure migration
+   `2026_09_24_000001_register_rbac_web_actions` has been applied
+   (`php artisan migrate`; additive only — never `migrate:fresh` on the dev DB).
+3. Deliver the follow-up report to the client (§3 is the substance; §5 lists
+   the open client questions and deferred items).
+4. Start **Phase 2 — accounting hardening** (only after the client approves)
+   per the plan:
    - `accounts.system_key` column + backfill of the 19 seeded system
      accounts; extend `Account::defaultAccounts()` to write it.
    - `posting_rules` table + platform seed catalog (ride_completion,
@@ -390,5 +444,5 @@ Behavior changes shipped in Phase 1 (communicate to the client/users):
      posting).
    - Acceptance: `php artisan accounting:audit` stays clean; trial balance
      before/after diff on a staging copy.
-6. Keep the cadence: every phase = implement, verify, report, commit on
+5. Keep the cadence: every phase = implement, verify, report, commit on
    `moeen`, stop for client go-ahead.

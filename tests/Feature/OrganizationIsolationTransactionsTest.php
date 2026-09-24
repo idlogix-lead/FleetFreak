@@ -61,6 +61,13 @@ class OrganizationIsolationTransactionsTest extends TestCase
             'created_by' => $userB->id,
         ]);
 
+        $customerA = Partner::create([
+            'name' => 'Customer Org A',
+            'actor_id' => 6,
+            'company_id' => $adminA->active_company_id,
+            'created_by' => $adminA->id,
+        ]);
+
         $customerB = Partner::create([
             'name' => 'Customer Org B',
             'actor_id' => 6,
@@ -68,9 +75,13 @@ class OrganizationIsolationTransactionsTest extends TestCase
             'created_by' => $userB->id,
         ]);
 
+        // Orders carry a customer: the ledger UNION inner-joins customers, so
+        // customer-less orders never reach it (pre-existing behaviour, open
+        // client question in docs/HANDOVER.md section 5).
         $orderA = Order::create([
             'order_no' => 'ORD-TX-A',
             'business_partner_id' => $agentA->id,
+            'customer_partner_id' => $customerA->id,
             'overall_status' => 'approved',
             'company_id' => $adminA->active_company_id,
             'client_id' => $adminA->client_id,
@@ -89,6 +100,7 @@ class OrganizationIsolationTransactionsTest extends TestCase
         $orderB = Order::create([
             'order_no' => 'ORD-TX-B',
             'business_partner_id' => $agentB->id,
+            'customer_partner_id' => $customerB->id,
             'overall_status' => 'approved',
             'company_id' => $companyB->id,
             'created_by' => $userB->id,
@@ -152,16 +164,15 @@ class OrganizationIsolationTransactionsTest extends TestCase
         // Organization B user's ledger shows their agent, never organization A's.
         // (SUM over varchar rate columns was a pre-existing PostgreSQL bug -
         // fixed with explicit numeric casts in both ledger controllers.)
-        \Illuminate\Support\Facades\DB::enableQueryLog();
         $response = $this->get('/ledgers?from_date=2020-01-01&to_date=2030-01-01');
-        $content = (string) $response->getContent();
-        $tbodyStart = strpos($content, '<tbody');
-        fwrite(STDERR, "\n=== LEDGER TBODY ===\n" . substr($content, $tbodyStart, 1400) . "\n=== END TBODY ===\n");
         $response->assertStatus(200);
         $response->assertSee('Agent Org B');
         $response->assertDontSee('Agent Org A');
 
         // Organization A admin: mirror image, plus the customer export stays scoped.
+        // (flushSession: AuthenticateSession logs out a user whose password hash
+        // differs from the one the previous request stored.)
+        $this->flushSession();
         $this->actingAs($adminA);
 
         $response = $this->get('/ledgers?from_date=2020-01-01&to_date=2030-01-01');
