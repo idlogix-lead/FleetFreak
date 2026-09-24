@@ -58,7 +58,7 @@ class OrderController extends Controller
             $orders = Order::when($companyId, function ($query) use ($companyId) {
                 return $query->where('company_id', $companyId);
             })
-                ->checkGlobal(9)->whereNotIn('overall_status', ['pending', 'approved'])->whereIn('trip_type',['passenger_trip','cargo_trip'])
+                ->checkGlobal(9)->where('overall_status', '!=', 'pending')->whereIn('trip_type',['passenger_trip','cargo_trip'])
                 ->when($query, function ($q) use ($query) {
                     $q->where(function ($q) use ($query) {
                         $q->where('order_no', 'ILIKE', '%' . $query . '%')
@@ -74,7 +74,7 @@ class OrderController extends Controller
 
         } else {
             $orders = Order::where('company_id', $companyId)
-                ->checkGlobal(9)->where('overall_status', '!=', 'pending')->where('overall_status', '!=', 'approved')->where('created_by', auth()->user()->id)->when($query, function ($q) use ($query) {
+                ->checkGlobal(9)->where('overall_status', '!=', 'pending')->where('created_by', auth()->user()->id)->when($query, function ($q) use ($query) {
                 $q->where(function ($q) use ($query) {
                     $q->where('order_no', 'ILIKE', '%' . $query . '%')
                         ->orWhere('overall_status', 'ILIKE', '%' . $query . '%')
@@ -452,7 +452,9 @@ class OrderController extends Controller
                 'active' => true,
             ],
         ];
-        $order = Order::checkGlobal(9)->where('company_id',auth()->user()->active_company())->find($id);
+        $order = Order::checkGlobal(9)->where('company_id',auth()->user()->active_company())
+            ->with(['partner_customer', 'partner_business', 'vehicle_Class', 'vehicleModel', 'orderDetails.vehicle', 'orderDetails.driver'])
+            ->findOrFail($id);
 
         return view('order.show', compact('order', 'breadcrumbs'));
     }

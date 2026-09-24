@@ -86,6 +86,9 @@
                                                     case 'unapproved':
                                                         $badgeClass = 'warning';
                                                         break;
+                                                    case 'approved':
+                                                        $badgeClass = 'info';
+                                                        break;
                                                     default:
                                                         $badgeClass = 'primary';
                                                 }
@@ -93,7 +96,11 @@
                                             <span class="badge bg-light-{{$badgeClass}} text-{{$badgeClass}} ">{{ Str::title($order->overall_status) }}</span></td>
 
                                             <td style='padding-right:5%;'>
-                                                @if ($order->overall_status !='cancelled' && $order->overall_status !='completed')
+                                                @if ($order->overall_status == 'approved')
+                                                    <a style="padding:20px 0 0 40px;" class="ms-1" href="{{ route('orders.show',$order->id) }}">
+                                                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="green" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-eye"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                                                    </a>
+                                                @elseif ($order->overall_status !='cancelled' && $order->overall_status !='completed')
                                                     @if(auth()->user()->actor_id==2)
                                                         <form action="{{ route('orders.destroy',$order->id) }}" method="POST">
                                                             @csrf
