@@ -375,6 +375,343 @@ class DashboardController extends Controller
         ]);
     }
 
+    public function indexNew(Request $request)
+    {
+        // super admin dashboard
+        if (auth()->user()->actor_id == 1) {
+            return view('home_dashboard.superadmin_dashboard');
+        }
+        // admin filters
+
+        $agentId = $request->input('agent');
+        // $agentName=$request->input('agent_name');
+        // $agentName = Partner::where('id', $agentId)->whereHas('users')->get();
+
+        // dd($agentName);
+        $fromDate = $request->input('date');
+        $toDate = $request->input('to_date');
+        $countryquery = $request->input('country');
+        $query = OrderDetail::query();
+        if (auth()->user()->actor_id == 2 & $agentId != null) {
+            $agentName = Partner::where('id', $agentId)->first()->company_name;
+        }
+
+
+        // Apply filters if present
+        if ($agentId) {
+
+            $query = $query->whereHas('order', function ($q) use ($agentId) {
+                $q->where('business_partner_id', $agentId);
+            });
+        }
+
+        if ($fromDate && $toDate) {
+            $query->whereBetween('date', [$fromDate, $toDate]);
+        } elseif ($fromDate) {
+            $query->whereDate('date', '>=', $fromDate);
+        } elseif ($toDate) {
+            $query->whereDate('date', '<=', $toDate);
+        }
+
+        // if ($date) {
+
+        //     $query = $query->whereDate('date', $date);
+        // }
+
+
+        // Fetch the filtered orders
+        $totalOrders = OrderDetail::totalOrders(clone $query);
+        $completedOrders = OrderDetail::completedOrders(clone $query);
+        $pendingOrders = OrderDetail::pendingOrders(clone $query);
+        $approvedOrders = OrderDetail::approvedOrders(clone $query);
+        $unapprovedOrders = OrderDetail::unapprovedOrders(clone $query);
+        $cancelOrders = OrderDetail::cancelOrders(clone $query);
+        $incompleteOrders = OrderDetail::incompleteOrders(clone $query);
+        $incompleteOrdersWithDriver = OrderDetail::incompleteOrdersWithDriver(clone $query);
+        $incompleteOrderWithoutDriver = OrderDetail::incompleteOrdersWithoutDriver(clone $query);
+
+
+        // fetch the filtered orders for agent
+        $agenttotalOrders = OrderDetail::agentTotalOrders(clone $query);
+        $agentcompletedOrders = OrderDetail::agentCompletedOrders(clone $query);
+        $agentpendingOrders = OrderDetail::agentPendingOrders(clone $query);
+        $agentapprovedOrders = OrderDetail::agentApprovedOrders(clone $query);
+        $agentunapprovedOrders = OrderDetail::agentUnapprovedOrders(clone $query);
+        $agentcancelOrders = OrderDetail::agentCancelOrders(clone $query);
+        $agentincompleteOrders = OrderDetail::agentIncompleteOrders(clone $query);
+
+        // ------------
+        $company_id = auth()->user()->active_company();
+
+        $unbookedCount = Vehicle::whereDoesntHave('orderDetails')->orWhereHas('orderDetails', function ($query) {
+            $query->whereIn('status', ['paid', 'completed']);
+        })->count();
+        // for count
+        $bookedCount = Vehicle::whereHas('orderDetails', function ($query) {
+            $query->where('status', 'incomplete')->where('date', Carbon::today());
+        })->count();
+        // for getting records:
+        $vehicle_assignments = OrderDetail::where('company_id', $company_id)->where('status', 'incomplete')->where('date', Carbon::today())->get();
+        // dd($vehicle_assignments);
+        // daily rides
+        // Apply country filter to dailyrides
+        $dailyridesQuery = OrderDetail::with('vehicle', 'rate_list')
+            ->where('company_id', $company_id)
+            ->where('status', 'incomplete')
+            ->whereNotNull('rate_list_id')
+            ->whereDate('date', Carbon::today())
+            ->when($countryquery, function ($q) use ($countryquery) {
+                $q->whereHas('order.partner_customer', function ($qr) use ($countryquery) {
+                    $qr->where('country', $countryquery);
+                });
+                // dd($countryquery);
+
+            });
+
+        // if ($countryquery) {
+        //     dd($countryquery);
+        //     $dailyridesQuery = $dailyridesQuery
+        //     ->whereHas('order.partner_customer', function($q) use ($countryquery) {
+        //     return $q->where('country', $countryquery);
+        // });
+        // }
+
+        $dailyrides = $dailyridesQuery->get();
+        // dd($dailyrides);
+
+
+        // Group daily rides by vehicle id
+        $groupedRides = $dailyrides->groupBy('vehicle_id');
+
+        // Initialize an array to store aggregated data
+        $vehicleBookings = [];
+
+        // Iterate through grouped rides
+        foreach ($groupedRides as $vehicleId => $rides) {
+            // Calculate total estimated time for this vehicle
+            $totalEstimatedTime = $rides->sum(function ($ride) {
+                return $ride->rate_list->estimated_time ?? 0;
+            });
+
+            // Get vehicle details (assuming vehicle model and number are concatenated)
+            // dd($rides->first()->vehicleModel->name);
+            $vehicleDetails = $rides->first()->vehicle->vehicleModel->name . ' ' . $rides->first()->vehicle_no;
+
+
+            $vehicleCount = $rides->count();
+
+            // Push data to $vehicleBookings array
+            $vehicleBookings[] = [
+                'x' => $vehicleDetails ?? 'Unknown Vehicle',
+                'y' => round($totalEstimatedTime / 60, 2),
+                'vehiclesCount' => $vehicleCount,
+            ];
+        }
+        // $company_id = auth()->user()->active_company();
+
+
+        $orderDetailsWithVehicle = OrderDetail::whereNotNull('vehicle_id')
+            ->where('company_id', $company_id)
+            ->whereIn('status', ['incomplete', 'in_progress'])->whereBetween('date', [Carbon::today(), Carbon::today()->addDays(7)])->get();
+        // $allcustomer = Partner::where('actor_id',6)->get();
+        // -------------getting top agents with highest sales----------
+        $topAgents = Partner::whereHas('orders_agent.order_details', function ($query) use ($company_id) {
+            $query->where('status', 'completed')->where('company_id', $company_id);
+        })
+            ->where('actor_id', 4)->get()
+            ->map(function ($partner) {
+                $totalSales = $partner->orders_agent->sum(function ($order) {
+                    return $order->order_details->sum('rate');
+                });
+                return [
+                    'agent_name' => $partner->name, // Adjust according to your column name
+                    'total_sales' => $totalSales,
+                ];
+            })
+
+            ->sortByDesc('total_sales')
+            ->take(5);
+        $company_id = auth()->user()->active_company();
+
+        // -----------------------End-------------------------------
+        // dd($topAgents);
+        $unpaidrides = OrderDetail::whereHas('order', function ($queryBuilder) {
+            $queryBuilder->where('overall_status', 'approved');
+        })->where('status', 'completed')->count();
+        $paidrides = OrderDetail::whereHas('order', function ($queryBuilder) {
+            $queryBuilder->where('overall_status', 'approved');
+        })->where('status', 'paid')->count();
+        $drivers = Partner::where('actor_id', 5)
+            ->where('company_id', $company_id)
+            ->get();
+        $employees = Partner::where('actor_id', 7)->get();
+        // for agent:
+        $agentallcustomer = Partner::where('actor_id', 6)->where('business_partner_id', auth()->user()->partner_id)->get();
+
+        // only run when login user is agent
+        if (auth()->user()->actor_id == 4) {
+
+            $agentQuery = auth()->user()->partner_id;
+            $fromDate = Carbon::now()->subDays(7)->startOfDay();
+            $toDate = Carbon::now()->endOfDay();
+            // Opening line summary query before fromDate
+            $openingSummaryQuery = Order::query()
+                ->select(
+                    DB::raw("'' as agent"),
+                    DB::raw("'' as customer"),
+                    DB::raw("'OPN' as trtype"),
+                    DB::raw("'' as tr_date"),
+                    DB::raw("'' as tr_no"),
+                    DB::raw("'' as description"),
+                    DB::raw("sum(NULLIF(od.rate, '')::numeric) as debit"),
+                    DB::raw("0 as credit")
+                )
+                ->join('order_lines as od', 'orders.id', '=', 'od.order_id')
+                ->whereIn('od.status', ['completed', 'paid'])
+                ->when($agentQuery, function ($query) use ($agentQuery) {
+                    $query->where('orders.business_partner_id', $agentQuery);
+                })
+                ->when($fromDate, function ($query) use ($fromDate) {
+                    $query->where('od.date', '<', $fromDate);
+                })
+                ->unionAll(
+                    PaymentHeader::query()
+                        ->select(
+                            DB::raw("'' as agent"),
+                            DB::raw("'' as customer"),
+                            DB::raw("'OPN' as trtype"),
+                            DB::raw("'' as tr_date"),
+                            DB::raw("'' as tr_no"),
+                            DB::raw("'' as description"),
+                            DB::raw("0 as debit"),
+                            DB::raw("sum(NULLIF(payment_lines.total_amount, '')::numeric) as credit")
+                        )
+                        ->join('payment_lines', 'payment_headers.id', '=', 'payment_lines.payment_header_id')
+                        ->when($agentQuery, function ($query) use ($agentQuery) {
+                            $query->where('payment_headers.agent_id', $agentQuery);
+                        })
+                        ->when($fromDate, function ($query) use ($fromDate) {
+                            $query->where('payment_headers.date', '<', $fromDate);
+                        })
+                );
+
+            // Order query between fromDate and toDate
+            $orderQuery = Order::query()
+                ->select(
+                    'partners.name as agent',
+                    'customers.name as customer',
+                    DB::raw("'inv' as trtype"),
+                    DB::raw("order_lines.date::text as tr_date"),
+                    DB::raw("concat(orders.order_no, '-', order_lines.id) as tr_no"),
+                    'orders.description as description',
+                    DB::raw("NULLIF(order_lines.rate, '')::numeric as debit"),
+                    DB::raw("0 as credit")
+                )
+                ->join('order_lines', 'orders.id', '=', 'order_lines.order_id')
+                ->join('partners', 'orders.business_partner_id', '=', 'partners.id')
+                ->join('partners as customers', 'orders.customer_partner_id', '=', 'customers.id')
+                ->whereIn('order_lines.status', ['completed', 'paid'])
+                ->when($agentQuery, function ($query) use ($agentQuery) {
+                    $query->where('partners.id', $agentQuery);
+                })
+                ->when($fromDate && $toDate, function ($query) use ($fromDate, $toDate) {
+                    $query->whereBetween('order_lines.date', [$fromDate, $toDate]);
+                });
+
+            // Payment query between fromDate and toDate
+            $paymentQuery = PaymentHeader::query()
+                ->select(
+                    'agents.name as agent',
+                    'customers.name as customer',
+                    DB::raw("'pay' as trtype"),
+                    DB::raw("payment_headers.date::text as tr_date"),
+                    'payment_headers.payment_no as tr_no',
+                    'payment_headers.description as description',
+                    DB::raw("0 as debit"),
+                    DB::raw("NULLIF(payment_lines.total_amount, '')::numeric as credit")
+                )
+                ->join('payment_lines', 'payment_headers.id', '=', 'payment_lines.payment_header_id')
+                ->join('partners as agents', 'payment_headers.agent_id', '=', 'agents.id')
+                ->join('partners as customers', 'payment_headers.customer_id', '=', 'customers.id')
+                ->when($agentQuery, function ($query) use ($agentQuery) {
+                    $query->where('agents.id', $agentQuery);
+                })
+                ->when($fromDate && $toDate, function ($query) use ($fromDate, $toDate) {
+                    $query->whereBetween('payment_headers.date', [$fromDate, $toDate]);
+                });
+
+            // Combining all queries
+            $combinedQuery = $openingSummaryQuery
+                ->unionAll($orderQuery)
+                ->unionAll($paymentQuery);
+
+            // Build the complete query and execute. fromSub() takes the SQL and
+            // the bindings from the same (organization-scoped) builder; pairing
+            // toSql() with mergeBindings(getQuery()) dropped the first leg's
+            // company_id binding and shifted every later one.
+            $subquerySql = DB::query()->fromSub($combinedQuery, 'tmptable')
+                ->select(
+                    'tmptable.agent',
+                    'tmptable.customer',
+                    'tmptable.trtype',
+                    'tmptable.tr_date',
+                    'tmptable.tr_no',
+                    'tmptable.description',
+                    DB::raw('SUM(tmptable.debit) as debit'),
+                    DB::raw('SUM(tmptable.credit) as credit')
+                )
+                ->groupBy('tmptable.agent', 'tmptable.customer', 'tmptable.trtype', 'tmptable.tr_date', 'tmptable.tr_no', 'tmptable.description')
+                ->orderBy('tmptable.agent')
+                ->orderBy('tmptable.customer')
+                ->orderBy('tmptable.tr_date')
+                ->orderBy('tmptable.trtype')
+                ->get();
+
+            // Execute the complete query
+            $ledgerEntries = $subquerySql->toArray();
+        } else {
+            $ledgerEntries = null;
+        }
+        // -----------------------------------
+
+
+        return view('home_dashboard.main', [
+            'unbookedCount' => $unbookedCount,
+            'bookedCount' => $bookedCount,
+            'vehicle_assignments' => $vehicle_assignments,
+            'orderDetailsWithVehicle' => $orderDetailsWithVehicle,
+            'topAgents' => $topAgents,
+            'unpaidrides' => $unpaidrides,
+            'paidrides' => $paidrides,
+            'drivers' => $drivers,
+            'employees' => $employees,
+            // for agent
+            'agentallcustomer' => $agentallcustomer,
+            'agenttotalOrders' => $agenttotalOrders,
+            'agentcompletedOrders' => $agentcompletedOrders,
+            'agentpendingOrders' => $agentpendingOrders,
+            'agentapprovedOrders' => $agentapprovedOrders,
+            'agentcancelOrders' => $agentcancelOrders,
+            'agentincompleteOrders' => $agentincompleteOrders,
+            'agentunapprovedOrders' => $agentunapprovedOrders,
+            // for admin
+            'totalOrders' => $totalOrders,
+            'completedOrders' => $completedOrders,
+            'pendingOrders' => $pendingOrders,
+            'approvedOrders' => $approvedOrders,
+            'unapprovedOrders' => $unapprovedOrders,
+            'cancelOrders' => $cancelOrders,
+            'incompleteOrders' => $incompleteOrders,
+            'vehicleBookings' => $vehicleBookings,
+            'ledgerEntries' => $ledgerEntries,
+            'agentName' => $agentName ?? '',
+            'incompleteOrdersWithDriver' => $incompleteOrdersWithDriver,
+            'incompleteOrderWithoutDriver' => $incompleteOrderWithoutDriver
+
+
+        ]);
+    }
+
     public function admin_rides_window(Request $request, $ordertype){
         $queryAgent = $request->input('agent');
 

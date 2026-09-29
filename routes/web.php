@@ -77,9 +77,9 @@ Route::get('/map',function(){
 //     Make::create(['name'=>'honda','description'=>'this is honda']);
 //  });
 
-Route::get('/dashboard', function () {
-    return view('dashboard');
-})->middleware(['auth', 'verified'])->name('dashboard');
+// Route::get('/dashboard', function () {
+//     return view('dashboard');
+// })->middleware(['auth', 'verified'])->name('dashboard');
 
 Route::middleware('auth')->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
@@ -112,6 +112,8 @@ Route::get('/test_page', function () {
 
 Route::post('/company_registration', [RegisterController::class, 'register']);
 Route::group(['middleware' => ['auth', 'afterauth']], function () {
+    // Registered before '/' so route('dashboard') keeps resolving to '/' (the last route with a name wins).
+    Route::get('/dashboard', [DashboardController::class, 'indexNew'])->name('dashboard');
     Route::get('/', [DashboardController::class, 'index'])->name('dashboard');
     Route::get('/vehicle_dashboard', [VehicleDashboardController::class, 'index'])->name('vehicle_dashboard');
     Route::get('/driver_dashboard', [DriverDashboardController::class, 'index'])->name('driver_dashboard');
