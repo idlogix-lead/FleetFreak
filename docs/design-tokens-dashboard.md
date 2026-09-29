@@ -1,8 +1,9 @@
-# Main dashboard: design tokens and Phase 7 checklist
+# Main dashboard and app shell: design tokens and Phase 7 checklist
 
 The redesigned main dashboard at `/dashboard` (`DashboardController@indexNew`) follows the Figma Make file
 "FleetFreak Final Design – HomePage". `/` (`DashboardController@index`, `home_dashboard/dashboard.blade.php`)
-is unchanged and is the fallback.
+is unchanged and is the fallback. The same design's sidebar and top bar are applied app-wide; see
+[App shell](#app-shell-sidebar-and-top-bar).
 
 | Piece | File |
 |---|---|
@@ -62,7 +63,6 @@ The Rides Order Status chart keeps its existing status point colours: `#4CAF50 #
 
 | Role | Font | Size / weight | Extra |
 |---|---|---|---|
-| Page title | DM Sans | 20px / 700 | letter-spacing −0.4px |
 | KPI and stat value | DM Sans | 26px / 700 | letter-spacing −0.5px |
 | Card title | DM Sans | 15px / 700 | |
 | Item title (insights, lists) | DM Sans | 13px / 600 | |
@@ -109,11 +109,12 @@ The design defines none. These are the ones in use:
 ## Component map
 
 **R** means the component shows real data, wired exactly as on the old dashboard. **S** means it shows sample data from `$placeholderData` and is tagged SAMPLE.
-Agents and other non-admin roles see only the page header, Rides Order Status and Customers, with no sample components.
+Agents and other non-admin roles see only the filter row, Rides Order Status and Customers, with no sample components.
+The page title, date and Refresh are in the app shell's top bar.
 
 | Component | R/S | Data source |
 |---|---|---|
-| Page header, Filter panel | R | `$agentName`, request `agent` / `date` / `to_date` |
+| Filter chips, Filter panel | R | `$agentName`, request `agent` / `date` / `to_date` |
 | KPI: Total Vehicles | S | `$placeholderData['kpis']['total_vehicles']` |
 | KPI: Active Vehicles, value | R | `Vehicle::countByStatus()['active']` |
 | KPI: Active Vehicles, badge and sub-label | S | `$placeholderData['kpis']['active_vehicles']` |
@@ -142,6 +143,96 @@ Agents and other non-admin roles see only the page header, Rides Order Status an
 
 ---
 
+## App shell: sidebar and top bar
+
+Every page that extends `layouts.app` gets the design's sidebar and top bar.
+
+| Piece | File |
+|---|---|
+| Sidebar | `resources/views/layouts/nav.blade.php` |
+| Top bar, user menu, notifications | `resources/views/layouts/header.blade.php` |
+| Styles | `public/assets/css/app-shell.css` (linked from `nav.blade.php`, so it loads before the sidebar paints) |
+| Scripts | `public/assets/js/app-shell.js` (linked from `header.blade.php`, deferred) |
+
+**Scoping rule.** Classes use the `ffs-` prefix. Tokens are `--ffs-*` custom properties on `:root`. Their dark values
+apply under `html.dark-theme`, and the sidebar's dark values also apply under `html.semi-dark`. The Synadmin hooks keep
+their classes and ids (`.sidebar-wrapper`, `.topbar`, `#menu` / `.metismenu`, `.toggle-icon`, `.mobile-toggle-menu`), so
+`app.js` still drives collapse, hover-expand, the mobile menu, active-link marking and metisMenu. Menu rules go through
+`#menu` to outrank the metisMenu rules in `app.css` and the theme files, and use `!important` only where those rules do.
+
+**Unchanged:**
+- the role menu pipeline in `nav.blade.php` (permissions, then items, then `layouts.partials.menu`) and the position sort;
+- `layouts/app.blade.php` (scripts and FCM token registration);
+- the geometry: 230px sidebar, a 70px rail from 1025px, an off-canvas drawer below that, and a 60px top bar.
+
+**Behaviour:**
+- **Title:** `@section('title')`, else the active breadcrumb in `$breadcrumbs`, else the dashboard name by route, else
+  "FleetFreak". A generic active crumb (Create, Edit, Show) gets its parent crumb in front, as in "Ride · Create".
+  **Date:** `now()->format('l, j F Y')`.
+- **Refresh:** only on the four dashboard routes (`dashboard`, `vehicle_dashboard`, `driver_dashboard`, `financial_dashboard`).
+- **Bell badge:** the number of unread notifications the offcanvas lists (`admin_unread_notifications()` or
+  `agent_unread_notifications()`). **Unapproved agents badge:** `Partner::unapprovedAgentsCount()`. Both badges are hidden at 0.
+- **Themes:** light, dark and semi-dark are supported. The header and sidebar colour options (`headercolor1-8`,
+  `sidebarcolor1-8`) are retired and the design's surfaces win. Their classes, the `/update-header` and `/update-sidebar`
+  endpoints and the user columns are untouched.
+- **`header.css`** is still loaded, because pages use its global rules (`.list-group-item`, `.dropdown-item:hover`, `.navbar-expand-lg`).
+
+### Tokens
+
+| Token | Light | Dark | Used for |
+|---|---|---|---|
+| `--ffs-brand` | `#640D5F` | same | logo band, search box, Refresh, avatar initial |
+| `--ffs-brand-hover` | `#9B3496` | same | Refresh hover |
+| `--ffs-brand-text` | `#640D5F` | `#d4a0d0` | icon tiles, active tab, focus outlines |
+| `--ffs-brand-pale` | `#f5eef5` | `rgba(155,52,150,.18)` | icon tiles, user chip, tab track, notification icon |
+| `--ffs-brand-paler` | `#faf5fa` | `rgba(155,52,150,.10)` | user-menu item hover, tab counts |
+| `--ffs-tile-hover` | `#ecdfec` | `rgba(155,52,150,.30)` | icon tile hover |
+| `--ffs-surface` | `#ffffff` | `#171717` | top bar, user menu, offcanvas |
+| `--ffs-border` | `#ede5ed` | `rgba(255,255,255,.08)` | borders |
+| `--ffs-text` | `#1c111b` | `#e4e5e6` | title, user name |
+| `--ffs-text-body` | `#6b5069` | `#b5a8b4` | menu items, notification text |
+| `--ffs-muted` | `#937a92` | `#9a8b99` | date, company, times |
+| `--ffs-faint` / `--ffs-sample-border` | `#bda8bc` / `#d4c0d3` | `#7d707c` / `rgba(255,255,255,.22)` | SAMPLE tag |
+| `--ffs-badge` | `#e53e3e` | same | count badges |
+
+The sidebar has its own set. Dark and semi-dark share the dark values.
+
+| Token | Light | Dark and semi-dark |
+|---|---|---|
+| `--ffs-nav-bg` | `#ffffff` | `#171717` |
+| `--ffs-nav-border` | `#ede5ed` | `rgba(255,255,255,.08)` |
+| `--ffs-nav-text` | `#6b5069` | `#b5a8b4` |
+| `--ffs-nav-strong` (hover, active, dot) | `#640D5F` | `#e9c6e6` |
+| `--ffs-nav-hover-bg` | `#faf5fa` | `rgba(255,255,255,.05)` |
+| `--ffs-nav-active-bg` (active pill) | `#f5eef5` | `rgba(155,52,150,.24)` |
+| `--ffs-nav-label` (NAVIGATION) | `#bda8bc` | `#7d707c` |
+| `--ffs-nav-foot-bg` (Collapse button) | `#faf5fa` | `rgba(255,255,255,.04)` |
+| `--ffs-nav-scroll` (thin scrollbar) | `#e8d5e7` | `rgba(255,255,255,.16)` |
+
+### Typography
+
+| Role | Font | Size / weight | Extra |
+|---|---|---|---|
+| Page title | DM Sans | 20px / 700 | letter-spacing −0.4px; 17px below 768px |
+| Date | Inter | 12px / 400 | |
+| NAVIGATION label | DM Mono | 9.5px / 500 | uppercase, 0.1em |
+| Menu item | Inter | 13.5px / 400 | children 13px; 600 when active |
+| User name / company | DM Sans / Inter | 13px / 600, 11px / 400 | |
+| Search placeholder | Inter | 13px / 400 | |
+| Collapse button | Inter | 12px / 600 | |
+
+### Breakpoints
+
+| Viewport | Sidebar | Top bar |
+|---|---|---|
+| ≥ 1200px | 230px, collapsible to a 70px rail (hover expands it) | title, search, actions |
+| 1025–1199px | same | search hidden |
+| 768–1024px | off-canvas drawer, opened by the menu button | title, actions |
+| < 768px | drawer | user chip shows only the avatar; Refresh shows only its icon |
+| < 576px | drawer | date hidden |
+
+---
+
 ## Phase 7 checklist: placeholder components
 
 Each item is done when the value comes from a real, organization-scoped source, its key has been removed from
@@ -161,6 +252,7 @@ the list removes the `$placeholderData` block and the "design placeholder data" 
 | 9 | Fleet Status donut | `fleet_status` | Vehicle counts for Active, Idle and Maintenance | needs an agreed definition of "Idle"; `VehicleDashboardController`: `vehicle_busy` / `vehicle_rides_busy_count`, and maintenance count (2) |
 | 10 | Fleet Insights | `insights` | Generated recommendations (title, body, tag) | **No insights engine exists.** "View All Insights" needs a target page. |
 | 11 | Next Actions | `next_actions` | Tasks with priority, category, title and due date; Gen. Invoice and Schedule actions | inspections due, expiries, unpaid invoices. **No task model exists.** The buttons need target routes. |
+| 12 | Top-bar search (app shell) | none: markup in `layouts/header.blade.php` | Organization-scoped search across vehicles, drivers and tasks, with a results view | `GET /customer/search`, `/agent/search`, `/driver/search` (partner-name lookups for select2 pickers). **No vehicle, task or cross-entity search exists.** Done when the input loses `readonly` and the SAMPLE tag is removed. |
 
 The inert sample controls are "View All Insights", "Gen. Invoice" and "Schedule". Each has `aria-disabled="true"` and a
 "Sample — available in Phase 7" tooltip. The Next Actions priority filter already works, on the client side.

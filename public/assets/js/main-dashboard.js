@@ -405,13 +405,6 @@
     }
 
     function wireActions() {
-        var refresh = root.querySelector('[data-ffd-action="refresh"]');
-        if (refresh) {
-            refresh.addEventListener('click', function () {
-                window.location.reload();
-            });
-        }
-
         // Same behaviour as the old dashboard's Reset: clear the fields, hide the agent chip.
         var reset = document.getElementById('ffd-filter-reset');
         if (reset) {

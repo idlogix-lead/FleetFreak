@@ -1,31 +1,26 @@
-<div class="sidebar-wrapper" data-simplebar="true">
-    <div class="sidebar-header"
-        style = "  auth()->user()->theme == 'light-theme' ? 'background:#171717;' : 'background:black;' ">
-        <div>
-            @if (auth()->user()->theme == 'light-theme')
+{{--
+    App shell: sidebar (styles in public/assets/css/app-shell.css, ffs- classes).
+    Only the wrapper around <ul id="menu"> is new: the permission -> menu pipeline below,
+    layouts.partials.menu and the position sort are unchanged. Collapse uses Synadmin's
+    .toggle-icon handler and the active-link / metisMenu setup in public/assets/js/app.js.
+--}}
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap">
+{{-- Loaded here (inside body, before the sidebar paints) so it comes after bootstrap-extended.css, app.css and the theme CSS. --}}
+<link rel="stylesheet" href="{{ asset('assets/css/app-shell.css') }}">
 
-            {{-- <img src="/assets/images/new_logo-01.png" class="logo-icon ms-1" alt="logo icon"> --}}
-                {{-- <img style="margin-top:12px; " src="/assets/images/new_logo-01.png" class="logo-icon" alt="logo icon"> --}}
-                {{-- <img style="margin-top:12px; " src="/assets/images/navbar-fleetfreak-logo.png" class="logo-icon" alt="logo icon"> --}}
-                <img style="" src="/assets/images/fleetfreak-logo-final-white-[Recovered].png" class="logo-icon" alt="logo icon">
-
-            @else
-                <img src="/assets/images/transport-dark-logo.png" class="logo-icon" alt="logo icon">
-            @endif
-
-        </div>
-        <div>
-            <h4 class="logo-text"><a href="{{ url('/') }}"><b></b></a></h4>
-        </div>
-
-        <div class="toggle-icon ms-1" style="width: 30px !important; height:30px !important;"><i class='bx bx-first-page'>k</i>
-
-        </div>
+<div class="sidebar-wrapper ffs-sidebar">
+    <div class="ffs-brand">
+        <a href="{{ url('/') }}" class="ffs-brand-link" aria-label="FleetFreak home">
+            <img src="/assets/images/fleetfreak-logo-final-white-[Recovered].png" class="ffs-brand-logo" alt="FleetFreak">
+        </a>
     </div>
+    <div class="ffs-nav-label">Navigation</div>
     <!--navigation-->
     <ul class="metismenu nav-list" id="menu">
         <li>
-            <a href="#" class="menu-title-color">
+            <a href="#" class="has-arrow menu-title-color">
                 <div class="parent-icon"><i class='bx bx-home'></i></div>
                 <div class="menu-title">Dashboards</div>
             </a>
@@ -118,39 +113,6 @@
     <script>
         // JavaScript code to reorder the list items
         $(document).ready(function() {
-            var $logoIcon = $('.logo-icon');
-            var $toggleIcon = $('.toggle-icon');
-
-            var originalLightSrc = '/assets/images/fleetfreak-logo-final-white-[Recovered].png';
-            var originalDarkSrc = '/assets/images/Zaroon_Logo-night.png';
-            var toggleLogo =
-            '/assets/images/transport-logo.png'; // This is the image you want to toggle to for light theme
-            // This is the image you want to toggle to for dark theme
-            var isLightTheme = @json(auth()->user()->theme == 'light-theme');
-            var isToggled = false;
-
-            $toggleIcon.on('click', function() {
-                if (isLightTheme) {
-                    if (isToggled) {
-                       
-                        $logoIcon.attr('src', originalLightSrc);
-                    } else {
-                        $logoIcon.attr('src', toggleLogo);
-                    }
-                } else {
-                    if (isToggled) {
-                        $logoIcon.attr('src', originalDarkSrc);
-                    } else {
-                        $logoIcon.attr('src', toggleLogo);
-                    }
-                }
-                //  $logoIcon.css({
-                //             width: '10px', // Set the width (adjust as needed)
-                //             height: '30px'  // Adjust the height automatically to maintain the aspect ratio
-                //         });
-               
-                isToggled = !isToggled;
-            });
             const ul = $('.nav-list');
             // const ul = document.getElementById('nav-list');
             // console.log(ul);
@@ -167,4 +129,13 @@
         })
     </script>
     <!--end navigation-->
+    <div class="ffs-sidebar-foot">
+        {{-- .toggle-icon: Synadmin's collapse / hover-expand toggle (app.js); below 1025px it closes the drawer. --}}
+        <button type="button" class="toggle-icon ffs-collapse" aria-label="Collapse sidebar">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"></polyline></svg>
+            <span class="ffs-collapse-text">Collapse</span>
+            <span class="ffs-expand-text">Keep open</span>
+            <span class="ffs-close-text">Close menu</span>
+        </button>
+    </div>
 </div>

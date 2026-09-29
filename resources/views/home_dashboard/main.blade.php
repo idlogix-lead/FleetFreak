@@ -86,12 +86,8 @@
 
     <div class="ffd">
 
-        {{-- Page header --}}
+        {{-- Page header: the title, date and Refresh are in the app shell's top bar (layouts/header.blade.php) --}}
         <div class="ffd-page-head">
-            <div>
-                <h1 class="ffd-page-title">Main Dashboard</h1>
-                <p class="ffd-page-date">{{ now()->format('l, j F Y') }}</p>
-            </div>
             <div class="ffd-page-actions">
                 @if (!empty($agentName))
                     <span class="ffd-chip" id="ffd-agent-chip">{{ $agentName }}</span>
@@ -99,10 +95,6 @@
                 @if ($filterFrom || $filterTo)
                     <span class="ffd-chip ffd-chip-muted">{{ $filterFrom ?: '...' }} &rarr; {{ $filterTo ?: '...' }}</span>
                 @endif
-                <button type="button" class="ffd-btn ffd-btn-primary" data-ffd-action="refresh">
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
-                    Refresh
-                </button>
                 <button type="button" class="ffd-btn ffd-btn-soft" data-bs-toggle="offcanvas" data-bs-target="#ffd-filter" aria-controls="ffd-filter">
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>
                     Filter

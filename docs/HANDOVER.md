@@ -1,4 +1,8 @@
-# FleetFreak Re-Architecture — Session Handover (2026-09-24)
+# FleetFreak Re-Architecture — Session Handover (2026-09-24, updated 2026-09-29)
+
+> **Start here (2026-09-29):** the Figma UI redesign track is mid-flight. Commit 1
+> (`97846e2`) is done, and commit 2 (app shell) is committed as **WIP**.
+> **Tomorrow's first task is the UI fix list in §7.5.**
 
 Written so a fresh Claude session (or any developer) can continue with zero
 conversational memory. Read top to bottom before touching anything.
@@ -23,6 +27,9 @@ Platform** under an 8-phase program:
 | 5 | Subscriptions (greenfield) | not started |
 | 6 | Employee expenses (greenfield) | not started |
 | 7 | Dashboards & reports | not started |
+
+Parallel UI track, outside the phase numbering: the **Figma redesign** of the main dashboard and the app-wide
+header and sidebar. Presentation only, with no query, model or scoping changes. See §7.
 
 **Three locked client decisions (do not reopen):**
 
@@ -69,9 +76,17 @@ is in require-dev).
 
 ## 2. Current state
 
-_Refreshed 2026-09-24 (end of the Phase 1 follow-up session)._
+_Refreshed 2026-09-24 (end of the Phase 1 follow-up session). Redesign status added 2026-09-29._
 
-- Branch: `moeen`, working tree clean. Commit history:
+- **2026-09-29:**
+  - `97846e2` (the new `/dashboard` page) and the WIP commit
+    "WIP: app shell redesign — UI fixes pending" sit on top of the history below. Details in §7.
+  - The working tree still holds the user's own uncommitted edits, deliberately left out of both commits:
+    - editor reformatting of `DashboardController.php` and `routes/web.php`;
+    - `public/assets/css/app.css`;
+    - `DashboardController copy 2.php`;
+    - an untracked `.mcp.json` (local MCP config; never commit it).
+- Branch: `moeen`. Commit history before 2026-09-29:
   `ff32402` first commit, `c734f18` bootstrap+docs, `721f238` Phase 0,
   `6e1ab1f` housekeeping, `daf4ac3` Phase 1, `0293bc5` handover,
   `6c43a48` Phase 1 follow-ups (ledger PG fixes, `accounting:audit` checks),
@@ -413,6 +428,8 @@ Behavior changes shipped in Phase 1 (communicate to the client/users):
 
 ## 6. Next steps for a fresh session
 
+0. **First (2026-09-30): work the UI fix list in §7.5.** Re-verify as described in §7.6, report, and commit
+   only when the user says so.
 1. Read `docs/TECHNICAL_KNOWLEDGE_BASE.md`, then this document.
 2. On any existing database, make sure migration
    `2026_09_24_000001_register_rbac_web_actions` has been applied
@@ -446,3 +463,158 @@ Behavior changes shipped in Phase 1 (communicate to the client/users):
      before/after diff on a staging copy.
 5. Keep the cadence: every phase = implement, verify, report, commit on
    `moeen`, stop for client go-ahead.
+
+---
+
+## 7. Figma redesign track: dashboard and app shell (2026-09-29)
+
+**Source.** Figma Make file `XpGQx5r44NYM1vQxnB3mFv` ("FleetFreak Final Design – HomePage"). Its React source
+(`src/App.tsx`, the `Sidebar`, `Topbar` and dashboard components) is the source of truth. The Figma MCP runs on a
+Starter plan (about 20 calls a month), so work from the extracted values and screenshots rather than new MCP calls.
+The tokens, component map and Phase 7 placeholder checklist are in `docs/design-tokens-dashboard.md`.
+
+**Rules the user set for this track:**
+- Presentation layer only: no changes to queries, models, controller data or Phase 1 scoping.
+- Plain CSS and JS; there is no Vite/Mix build.
+- Report before code, and commit only when told to.
+- Stage explicit paths, and never the user's unrelated edits. The user's editor reformats files on save. When a
+  file mixes the user's edits with yours, build the staged blob from HEAD plus your hunks
+  (`git hash-object -w --no-filters` + `git update-index --cacheinfo`). The repo uses `autocrlf=true`, and blobs are LF.
+
+### 7.1 Commit 1: `97846e2`, "Main dashboard: new /dashboard page from the Figma design" (done)
+
+- `/dashboard` runs `DashboardController@indexNew`, which has the same body as `index` and renders
+  `home_dashboard/main.blade.php`. `/` (`index`, `dashboard.blade.php`) stays unchanged as the user's fallback.
+- The route is inside the `auth` + `afterauth` group and is registered **before** `/`. Both routes are named
+  `dashboard`, and the last one registered wins, so `route('dashboard')` still resolves to `/`.
+- The CSS and JS live in `public/assets/css/main-dashboard.css` and `public/assets/js/main-dashboard.js`. Everything
+  is scoped under `.ffd` and the view has no inline CSS or JS.
+- Placeholder values live in a single `$placeholderData` block at the top of the view. They are tagged SAMPLE, and the
+  Phase 7 checklist is in the tokens doc.
+
+### 7.2 Commit 2: the app shell (committed as WIP; UI fixes pending)
+
+The Figma sidebar and top bar now apply to every page that extends `layouts.app`. The user accepted that `/` gets
+the new shell around its old body. There are 8 files:
+
+| File | What changed |
+|---|---|
+| `resources/views/layouts/nav.blade.php` | New wrapper: a plum logo band (the white logo; the collapsed rail clips it to its built-in tile), the NAVIGATION label, `#menu` as the scroll area with a thin native scrollbar (simplebar removed), and a pinned **Collapse** button carrying `.toggle-icon`, so Synadmin's `app.js` still drives collapse and hover-expand. The menu pipeline (61 lines: permissions, items, `layouts.partials.menu`) and the position-sort script are **byte-identical to HEAD**. The hard-coded Dashboards group gained `has-arrow`. Removed: the Zaroon logo-swap script, the stray "k", and the broken inline style. |
+| `resources/views/layouts/header.blade.php` | Rewritten, with the same data calls and role gates. **Title:** `@section('title')`, then the active breadcrumb (a Create/Edit/Show crumb gets its parent: "Ride · Create"), then the dashboard name by route, then "FleetFreak". **Date:** `now()->format('l, j F Y')`. **Search:** SAMPLE, read-only; Ctrl/⌘K focuses it; hidden below 1200px. **Refresh:** only on the routes `dashboard`, `vehicle_dashboard`, `driver_dashboard` and `financial_dashboard`. **Actor 2:** unapproved-agents tile (`#notificationCount`, hidden at 0) and Vehicle Locations. **Actors 2 and 4:** Create Ride, and a bell showing the real unread count, which replaces the fake 3-second dot. The notifications offcanvas keeps the same ids and queries but now renders only for actors 2 and 4. **User chip:** image or initial; its dropdown has the company switch (`#active_company_dropdown`, URL in `data-change-url`), Dashboard, Profile and Logout (POST with `@csrf`). Removed: about 370 lines of commented demo markup, the orphan "Create order" `<ul>`, the light-theme `$('#1')` script, and the bug where clicking the bell zeroed the agents badge. `header.css` **is still loaded**. |
+| `public/assets/css/app-shell.css` | New. `--ffs-*` tokens on `:root`, dark values under `html.dark-theme`, and the sidebar's dark values also under `html.semi-dark`. `ffs-` classes. Menu rules go through `#menu` to outrank `app.css` and the theme files, with scoped `!important` only where those use it: menu white background, hover colour, `.parent-icon`, and the `input::placeholder` rule. The two surface rules marked "D3" retire `headercolorN` / `sidebarcolorN`. Geometry is unchanged: 230px sidebar, 70px rail from 1025px, an off-canvas drawer at 1024px and below, and a 60px top bar (its left edge moves from 200px to 230px). |
+| `public/assets/js/app-shell.js` | New, loaded deferred. The company switch keeps the same POST, reload and `msgboxbox` errors, with CSRF read from the meta tag. Also: the Unread/All tabs, Refresh (`location.reload()`), and Ctrl/⌘K (the hint reads "Ctrl K" off a Mac). |
+| `resources/views/home_dashboard/main.blade.php` | Removed the in-page title, date and Refresh, which are now in the top bar. The chips and Filter stay. |
+| `public/assets/css/main-dashboard.css` | Removed the dead `.ffd-page-title` / `.ffd-page-date` rules; the page head is right-aligned. |
+| `public/assets/js/main-dashboard.js` | Removed the dead Refresh handler. |
+| `docs/design-tokens-dashboard.md` | New "App shell" section (files, behaviour, tokens, type, breakpoints); Phase 7 item 12 covers the search. |
+
+Decisions the user made for commit 2:
+- **D1:** the title fallback chain above.
+- **D2:** Refresh on the dashboards only.
+- **D3:** the header and sidebar colour options are retired. Their classes, the `/update-header` and `/update-sidebar` endpoints and the user columns are untouched.
+- **D4:** fix both header bugs (the fake dot, and the bell zeroing the agents badge).
+- **D5:** remove the dead code.
+- The "Main Dashboard" menu link keeps pointing at `/` for now.
+
+### 7.3 Verification results (before the UI fixes)
+
+Scratch tooling, not in the repo. It lives in the Claude session scratchpad
+`C:\Users\DELL\AppData\Local\Temp\claude\d--laragon-www-FleetFreak\2f34042c-f212-470f-847a-6eaf564921cb\scratchpad\`.
+Temp storage can be cleared, so see §7.6 to rebuild it.
+
+- **Crawl.** Every parameter-free authenticated GET route: 176 routes once export, PDF, Jasper and logout routes are
+  excluded. Run
+  as three users (seeded admin, actor 2; an agent, actor 4; a super admin, actor 1) on `fleet_freak_testing`. It
+  records the status, an md5 of the `.page-content` HTML with the CSRF token normalised, and the ordered sidebar
+  (label → href) list. The baseline ran twice before any edit.
+  - **Status changes: 0** out of 528 checks.
+  - **Page content changes:** only `/dashboard` (expected: the title, date and Refresh moved to the header).
+  - **Pages with the new shell:** all 385 pages that use the layout (admin 135, agent 129, super 121).
+  - **Sidebar:** identical for all 3 users (81 links). It is also identical for 5 permission sets on the admin role
+    (81 / 60 / 58 / 12 / 5 links).
+  - **Nondeterministic pages:** `/drivers` and `/business_agents` have no `ORDER BY`, so row order changes between
+    identical runs. Replaying with the old and new layout files reproduced both hashes, so the shell isn't the cause.
+  - **Errors that predate this work:**
+    - missing `create()` methods (bulkpayments, driver_assignments, ledgers, maintenance_approvals, pending_orders);
+    - a missing `DataTableController`;
+    - the missing `service_providers` table;
+    - `/profile` needs route `verification.send`;
+    - the agent's vehicle, driver and financial dashboards fail with `$agentallcustomer` undefined;
+    - super-admin forms fail with `actor_id` on null;
+    - `/pending_orders` (super admin) fails with `$export_link` undefined.
+  - **Crawler gotcha:** with `RefreshDatabase`, one failing query aborts the Postgres transaction and every later
+    request fails with `25P02`. Run each page in a savepoint (`DB::beginTransaction()` / `DB::rollBack($level)`).
+- **Tests:**
+  - `SmokeLoginTest` and `AgentDashboardTest` pass (3 tests, 14 assertions).
+  - The commit-1 render test (`/dashboard` has the same data as `/`, and 11 SAMPLE markers) passes (37 assertions).
+  - A scratch role-gate test of the header passes (50 assertions). It covers ids, URLs, CSRF, badges, titles and
+    where Refresh appears, for admin, agent and super admin.
+  - The full `php artisan test` suite was **not** re-run.
+- **Screenshots** (headless Edge, 1440, 1024 and 375px; light, dark and semi-dark; collapsed rail, active item, user
+  menu, notifications, drawer, agent view, retired colour options). Private review page:
+  https://claude.ai/artifact/XUCt5WrBuPZaJ2Qg1R9nHe
+- **Not yet checked by hand in a browser:**
+  - the company switch;
+  - the bell, the tabs and the badges;
+  - collapse, hover-expand and the drawer;
+  - menu groups;
+  - Ctrl+K;
+  - Logout;
+  - console errors, including FCM.
+
+### 7.4 Deviations from the approved commit-2 plan
+
+1. **`header.css` still loaded** (the plan said to stop loading it). Pages depend on its global rules:
+   `.list-group-item` in 13 views, `.dropdown-item:hover` in 67, and `.navbar-expand-lg`.
+2. **Refresh is gated by route name**, not by `@section('header_actions')`. The dashboard views, including the
+   frozen `dashboard.blade.php`, can't be edited.
+3. **Title refinement:** Create, Edit and Show are the active crumb on 266 pages, so they get their parent in front.
+   Dashboards are named by route. `main.blade.php` needed no `@section('title')`.
+4. **`only-logo.png` not used**, because it's blue. The white logo already contains a white tile with the plum mark.
+5. **SAMPLE tag sits outside the search pill.** Inside, it cut the placeholder short.
+6. **Zero badges hidden**, and the offcanvas is rendered only for actors 2 and 4. Only they have a bell. Before, it
+   rendered for everyone and ran the agent notification queries.
+7. **simplebar removed** from the sidebar, so Collapse can stay pinned outside the scroll area.
+
+### 7.5 Open UI fix list — tomorrow's first task
+
+1. **User-reported UI issues: TO ADD.** The user reported open UI issues at the end of the 2026-09-29 session, but
+   they never reached that Claude session: no message, no comments on the review page. Get them from the user first
+   and number them here, ahead of the items below.
+2. **Two Refresh buttons on `/`.** The frozen old body has its own Refresh next to the header's. Options: hide the
+   header Refresh on route path `/` only, or leave it until `/` switches to the new dashboard.
+3. **Title truncates on phones.** At 375px an admin on a dashboard has Refresh, four tiles and the avatar, so the
+   title shrinks to "Main …". Options: move Vehicle Locations and Create Ride into the user menu below 576px, or
+   drop the title below 400px.
+4. **Pages without breadcrumbs show "FleetFreak"** as the title (calendar, user profile and others). Options: add a
+   route-name → title map to the header, or add `@section('title')` to those views.
+5. **Hover state not captured in screenshots.** Check the menu hover pill (`#faf5fa`), the icon-tile hover and the
+   user-menu hover in a browser against the Figma hover reference.
+6. **Manual browser checks** (see the last item of §7.3) have not been done yet.
+7. **Chart y-tick density on `/dashboard`** (from commit 1). Chart.js uses 10k and $1k steps where the design uses
+   20k and $1.5k. Set `ticks.stepSize` / `maxTicksLimit` if the user wants an exact match.
+8. **Vehicles table clips its Actions column at 1024px.** That's the existing page body, not the shell. Confirm
+   whether it's in scope.
+9. **Decision still open:** should the menu's "Main Dashboard" link move from `/` to `/dashboard`?
+
+Data issue noticed, not UI and not fixed:
+- `Notification::admin_all_notifications()` is `self::get()`, which is unscoped. The admin's "All" tab lists
+  notifications from every company, so it's a Phase 1 scoping gap. Scope it by the active company, or by
+  `receiver_id` as the agent version does, once the client confirms the intended behaviour.
+
+### 7.6 How to re-verify after the UI fixes
+
+1. **Re-run the crawl** (`CrawlShellTest.php` in the scratchpad) with `CRAWL_OUT` set.
+2. **Compare with the baseline** using
+   `php crawl-compare.php crawl-baseline-a.json crawl-baseline-b.json <new>.json`.
+   - Expected: 0 status changes, only `/dashboard` differs, and every layout page has the new shell.
+   - `/drivers` and `/business_agents` may flip.
+3. **Re-run the menu-variant capture** (`MenuVariantsTest.php`, `MENU_OUT`) and diff it against `menu-before.json`.
+4. **If the scratchpad has been cleared,** rebuild the baseline from `97846e2`: check it out in a worktree, run the
+   same crawl there, then crawl the current tree.
+5. **Screenshots:**
+   - `ShellScreensTest.php` dumps the HTML.
+   - Serve it same-origin with `php -S 127.0.0.1:8124 -t public shots-router.php`. Loaded from `file://`, the
+     boxicons font fails to load and the icons show as squares.
+   - Take the shots with `shoot.ps1` (headless Edge; below 500px wide it uses an iframe wrapper).
+6. **Run the tests:** `SmokeLoginTest`, `AgentDashboardTest`, the render test and the role-gate test.

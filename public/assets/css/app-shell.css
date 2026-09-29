@@ -1,0 +1,992 @@
+/*
+ * App shell: sidebar (layouts/nav.blade.php) and top bar (layouts/header.blade.php),
+ * on every page that extends layouts.app. Class names use the ffs- prefix; tokens are
+ * documented in docs/design-tokens-dashboard.md ("App shell").
+ *
+ * Loaded inside <body>, after bootstrap-extended.css, app.css, dark-theme.css,
+ * semi-dark.css and header-colors.css. Geometry is unchanged: 230px sidebar, 70px
+ * collapsed rail (1025px and up), off-canvas below that, 60px top bar.
+ *
+ * Specificity notes:
+ * - Menu rules go through #menu so they outrank the metisMenu rules in app.css and the
+ *   theme files; !important is used only where those rules use it.
+ * - The two surface rules marked "D3" outrank html.headercolorN .topbar and
+ *   html.color-sidebar.sidebarcolorN .sidebar-wrapper: the colour options are retired
+ *   and the design's white surfaces win. Dark and semi-dark are handled by tokens.
+ */
+
+/* ------------------------------------------------------------------ tokens */
+
+:root {
+    --ffs-brand: #640D5F;
+    --ffs-brand-hover: #9B3496;
+    --ffs-brand-text: #640D5F;
+    --ffs-brand-pale: #f5eef5;
+    --ffs-brand-paler: #faf5fa;
+    --ffs-tile-hover: #ecdfec;
+    --ffs-focus-ring: rgba(100, 13, 95, 0.18);
+
+    --ffs-surface: #ffffff;
+    --ffs-border: #ede5ed;
+
+    --ffs-text: #1c111b;
+    --ffs-text-body: #6b5069;
+    --ffs-muted: #937a92;
+    --ffs-faint: #bda8bc;
+    --ffs-sample-border: #d4c0d3;
+
+    --ffs-badge: #e53e3e;
+    --ffs-shadow-pop: 0 12px 32px rgba(100, 13, 95, 0.12);
+
+    /* Sidebar (semi-dark switches only these) */
+    --ffs-nav-bg: #ffffff;
+    --ffs-nav-border: #ede5ed;
+    --ffs-nav-text: #6b5069;
+    --ffs-nav-strong: #640D5F;
+    --ffs-nav-hover-bg: #faf5fa;
+    --ffs-nav-active-bg: #f5eef5;
+    --ffs-nav-label: #bda8bc;
+    --ffs-nav-foot-bg: #faf5fa;
+    --ffs-nav-scroll: #e8d5e7;
+
+    --ffs-font-display: 'DM Sans', system-ui, sans-serif;
+    --ffs-font-body: 'Inter', system-ui, sans-serif;
+    --ffs-font-mono: 'DM Mono', ui-monospace, monospace;
+}
+
+/* The design has no dark variant; these follow Synadmin's dark surfaces (#171717). */
+html.dark-theme {
+    --ffs-brand-text: #d4a0d0;
+    --ffs-brand-pale: rgba(155, 52, 150, 0.18);
+    --ffs-brand-paler: rgba(155, 52, 150, 0.10);
+    --ffs-tile-hover: rgba(155, 52, 150, 0.30);
+    --ffs-focus-ring: rgba(212, 160, 208, 0.30);
+
+    --ffs-surface: #171717;
+    --ffs-border: rgba(255, 255, 255, 0.08);
+
+    --ffs-text: #e4e5e6;
+    --ffs-text-body: #b5a8b4;
+    --ffs-muted: #9a8b99;
+    --ffs-faint: #7d707c;
+    --ffs-sample-border: rgba(255, 255, 255, 0.22);
+
+    --ffs-shadow-pop: 0 12px 32px rgba(0, 0, 0, 0.45);
+}
+
+html.dark-theme,
+html.semi-dark {
+    --ffs-nav-bg: #171717;
+    --ffs-nav-border: rgba(255, 255, 255, 0.08);
+    --ffs-nav-text: #b5a8b4;
+    --ffs-nav-strong: #e9c6e6;
+    --ffs-nav-hover-bg: rgba(255, 255, 255, 0.05);
+    --ffs-nav-active-bg: rgba(155, 52, 150, 0.24);
+    --ffs-nav-label: #7d707c;
+    --ffs-nav-foot-bg: rgba(255, 255, 255, 0.04);
+    --ffs-nav-scroll: rgba(255, 255, 255, 0.16);
+}
+
+/* ------------------------------------------------------------------ sidebar */
+
+/* D3 */
+html body .wrapper .sidebar-wrapper.ffs-sidebar {
+    background: var(--ffs-nav-bg);
+    border-right: 1px solid var(--ffs-nav-border);
+    box-shadow: none;
+}
+
+.ffs-sidebar {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    font-family: var(--ffs-font-body);
+}
+
+.ffs-brand {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    height: 60px;
+    padding: 0 20px;
+    background: var(--ffs-brand);
+}
+
+/* The logo image is a white tile with the mark, then the white wordmark (2000x441).
+   At 34px high the tile ends at 30px, so the collapsed rail clips to the tile. */
+.ffs-brand-link {
+    display: block;
+    width: 155px;
+    overflow: hidden;
+    transition: width .2s ease-out;
+}
+
+.ffs-brand-logo {
+    display: block;
+    width: auto;
+    max-width: none;
+    height: 34px;
+}
+
+.ffs-nav-label {
+    flex-shrink: 0;
+    padding: 16px 20px 4px;
+    font-family: var(--ffs-font-mono);
+    font-size: 9.5px;
+    font-weight: 500;
+    line-height: 1.4;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    color: var(--ffs-nav-label);
+}
+
+.ffs-sidebar #menu {
+    flex: 1 1 auto;
+    flex-wrap: nowrap;
+    min-height: 0;
+    margin: 0;
+    padding: 8px 10px 12px;
+    overflow-x: hidden;
+    overflow-y: auto;
+    background-color: transparent !important; /* app.css: white !important */
+    scrollbar-width: thin;
+    scrollbar-color: var(--ffs-nav-scroll) transparent;
+}
+
+.ffs-sidebar #menu::-webkit-scrollbar {
+    width: 4px;
+}
+
+.ffs-sidebar #menu::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.ffs-sidebar #menu::-webkit-scrollbar-thumb {
+    border-radius: 99px;
+    background: var(--ffs-nav-scroll);
+}
+
+.ffs-sidebar #menu li {
+    flex-shrink: 0;
+    margin: 0;
+}
+
+.ffs-sidebar #menu li + li {
+    margin-top: 1px;
+}
+
+.ffs-sidebar #menu a {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 12px;
+    border: 0;
+    border-radius: 8px;
+    background-color: transparent;
+    color: var(--ffs-nav-text);
+    font-family: var(--ffs-font-body);
+    font-size: 13.5px;
+    font-weight: 400;
+    line-height: 1.2;
+    text-decoration: none;
+    white-space: nowrap;
+    transition: background-color .15s, color .15s;
+}
+
+.ffs-sidebar #menu a > svg,
+.ffs-sidebar #menu .parent-icon svg {
+    flex-shrink: 0;
+    width: 18px;
+    height: 18px;
+}
+
+.ffs-sidebar #menu .parent-icon {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    font-size: 18px;
+    line-height: 1;
+    color: inherit !important; /* app.css: #640D5F !important on hover and active */
+}
+
+.ffs-sidebar #menu .menu-title {
+    min-width: 0;
+    margin: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: inherit;
+    font-size: inherit;
+}
+
+.ffs-sidebar #menu a:focus {
+    background-color: transparent;
+    color: var(--ffs-nav-text);
+}
+
+.ffs-sidebar #menu a:hover {
+    background-color: var(--ffs-nav-hover-bg);
+    color: var(--ffs-nav-strong) !important; /* app.css: #640D5F !important */
+}
+
+.ffs-sidebar #menu a:focus-visible {
+    outline: 2px solid var(--ffs-nav-strong);
+    outline-offset: -2px;
+}
+
+/* Active page (app.js marks the matching li and its parents with mm-active). */
+.ffs-sidebar #menu li.mm-active > a {
+    color: var(--ffs-nav-strong);
+    font-weight: 600;
+}
+
+.ffs-sidebar #menu li.mm-active > a:not(.has-arrow) {
+    background-color: var(--ffs-nav-active-bg);
+}
+
+.ffs-sidebar #menu li.mm-active > a:not(.has-arrow)::after {
+    content: "";
+    flex-shrink: 0;
+    width: 6px;
+    height: 6px;
+    margin-left: auto;
+    border-radius: 99px;
+    background: var(--ffs-nav-strong);
+}
+
+/* Groups (metisMenu): chevron points right when closed, down when open. */
+.ffs-sidebar #menu a.has-arrow {
+    padding-right: 30px;
+}
+
+.ffs-sidebar #menu a.has-arrow::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    right: 14px;
+    width: 6px;
+    height: 6px;
+    border-style: solid;
+    border-width: 1.5px 1.5px 0 0;
+    border-color: currentColor;
+    opacity: .6;
+    transform: translateY(-50%) rotate(45deg);
+    transform-origin: center;
+    transition: transform .2s ease-out;
+}
+
+.ffs-sidebar #menu li.mm-active > a.has-arrow::after {
+    transform: translateY(-70%) rotate(135deg);
+}
+
+/* Children: indented under the parent icon with a guide line; Synadmin's arrows hidden. */
+.ffs-sidebar #menu ul {
+    margin: 2px 0 4px 21px;
+    padding: 0 0 0 8px;
+    border: 0;
+    border-left: 1px solid var(--ffs-nav-border);
+    border-radius: 0;
+    background: transparent;
+}
+
+.ffs-sidebar #menu ul a {
+    padding: 7px 10px;
+    font-size: 13px;
+}
+
+.ffs-sidebar #menu ul a > i.bx-right-arrow-alt {
+    display: none;
+}
+
+.ffs-sidebar-foot {
+    flex-shrink: 0;
+    padding: 10px;
+    border-top: 1px solid var(--ffs-nav-border);
+}
+
+.ffs-sidebar-foot .ffs-collapse.toggle-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    width: 100%;
+    padding: 9px;
+    border: 1px solid var(--ffs-nav-border);
+    border-radius: 8px;
+    background: var(--ffs-nav-foot-bg);
+    color: var(--ffs-nav-strong);
+    font-family: var(--ffs-font-body);
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: background-color .15s;
+}
+
+.ffs-sidebar-foot .ffs-collapse.toggle-icon:hover {
+    background: var(--ffs-nav-active-bg);
+}
+
+.ffs-sidebar-foot .ffs-collapse.toggle-icon:focus-visible {
+    outline: 2px solid var(--ffs-nav-strong);
+    outline-offset: 2px;
+}
+
+.ffs-collapse svg {
+    flex-shrink: 0;
+    transition: transform .2s ease-out;
+}
+
+.ffs-expand-text,
+.ffs-close-text {
+    display: none;
+}
+
+/* Collapsed rail. app.css keeps hiding .menu-title and the submenus here. */
+@media screen and (min-width: 1025px) {
+    .wrapper.toggled:not(.sidebar-hovered) .ffs-brand {
+        justify-content: center;
+        padding: 0;
+    }
+
+    .wrapper.toggled:not(.sidebar-hovered) .ffs-brand-link {
+        width: 30px;
+    }
+
+    .wrapper.toggled:not(.sidebar-hovered) .ffs-nav-label {
+        display: none;
+    }
+
+    .wrapper.toggled:not(.sidebar-hovered) .ffs-sidebar #menu {
+        padding: 12px 8px;
+    }
+
+    .wrapper.toggled:not(.sidebar-hovered) .ffs-sidebar #menu a {
+        justify-content: center;
+        gap: 0;
+        padding: 10px 0;
+    }
+
+    .wrapper.toggled:not(.sidebar-hovered) .ffs-sidebar #menu a::after {
+        display: none;
+    }
+
+    .wrapper.toggled:not(.sidebar-hovered) .ffs-collapse-text {
+        display: none;
+    }
+
+    .wrapper.toggled .ffs-collapse svg {
+        transform: rotate(180deg);
+    }
+
+    /* Hover-expanded while collapsed: the button pins the sidebar open. */
+    .wrapper.toggled.sidebar-hovered .ffs-collapse-text {
+        display: none;
+    }
+
+    .wrapper.toggled.sidebar-hovered .ffs-expand-text {
+        display: inline;
+    }
+
+    html body .wrapper.toggled.sidebar-hovered .sidebar-wrapper.ffs-sidebar {
+        box-shadow: 0 8px 32px rgba(28, 17, 27, 0.16);
+    }
+}
+
+/* ------------------------------------------------------------------ top bar */
+
+/* D3 */
+html body .wrapper .topbar.ffs-topbar {
+    background: var(--ffs-surface);
+    border-bottom: 1px solid var(--ffs-border);
+    box-shadow: none;
+}
+
+.ffs-topbar {
+    left: 230px; /* app.css: 200px under the 230px sidebar; toggled (70px) and mobile (0) rules still apply */
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 0 28px;
+    font-family: var(--ffs-font-body);
+}
+
+.wrapper .ffs-topbar .mobile-toggle-menu {
+    display: none;
+    color: var(--ffs-brand-text);
+}
+
+.ffs-heading {
+    flex: 0 1 auto;
+    min-width: 0;
+}
+
+.ffs-topbar .ffs-title {
+    margin: 0;
+    overflow: hidden;
+    font-family: var(--ffs-font-display);
+    font-size: 20px;
+    font-weight: 700;
+    line-height: 1.25;
+    letter-spacing: -0.4px;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    color: var(--ffs-text) !important; /* bootstrap-extended.css forces h1 to #640D5F !important */
+}
+
+.ffs-topbar .ffs-date {
+    margin: 0;
+    font-size: 12px;
+    line-height: 1.4;
+    white-space: nowrap;
+    color: var(--ffs-muted);
+}
+
+/* Search: SAMPLE until Phase 7 (read-only). Centred in the space between title and actions. */
+.ffs-search-slot {
+    display: flex;
+    flex: 1 1 auto;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-width: 0;
+}
+
+.ffs-search {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 280px;
+    max-width: 100%;
+    height: 36px;
+    padding: 0 10px 0 14px;
+    border-radius: 10px;
+    background: var(--ffs-brand);
+    color: rgba(255, 255, 255, 0.65);
+    transition: box-shadow .15s;
+}
+
+.ffs-search:focus-within {
+    box-shadow: 0 0 0 3px var(--ffs-focus-ring);
+}
+
+.ffs-search svg {
+    flex-shrink: 0;
+}
+
+.ffs-topbar .ffs-search-input {
+    flex: 1 1 auto;
+    min-width: 0;
+    height: 100%;
+    padding: 0;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    color: #ffffff;
+    font-family: var(--ffs-font-body);
+    font-size: 13px;
+    cursor: default;
+    -webkit-appearance: none;
+    appearance: none;
+}
+
+.ffs-topbar .ffs-search-input::placeholder {
+    color: rgba(255, 255, 255, 0.65) !important; /* app.css: input::placeholder #000 / .3 !important */
+    opacity: 1 !important;
+}
+
+.ffs-topbar .ffs-search-input::-webkit-search-cancel-button {
+    display: none;
+}
+
+/* Same look as the dashboard's SAMPLE tag (.ffd-sample). */
+.ffs-topbar .ffs-sample {
+    flex-shrink: 0;
+    padding: 3px 5px;
+    border: 1px dashed var(--ffs-sample-border);
+    border-radius: 4px;
+    font-family: var(--ffs-font-mono);
+    font-size: 9.5px;
+    font-weight: 500;
+    line-height: 1;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--ffs-faint);
+    cursor: help;
+}
+
+.ffs-topbar .ffs-kbd {
+    flex-shrink: 0;
+    padding: 2px 5px;
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.12);
+    box-shadow: none;
+    font-family: var(--ffs-font-body);
+    font-size: 10px;
+    line-height: 1.4;
+    letter-spacing: .02em;
+    white-space: nowrap;
+    color: rgba(255, 255, 255, 0.55);
+}
+
+.ffs-actions {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    gap: 10px;
+    margin-left: auto;
+}
+
+.ffs-btn-primary {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 16px;
+    border: 0;
+    border-radius: 8px;
+    background: var(--ffs-brand);
+    color: #ffffff;
+    font-family: var(--ffs-font-body);
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 1.35;
+    cursor: pointer;
+    transition: background-color .15s;
+}
+
+.ffs-btn-primary:hover {
+    background: var(--ffs-brand-hover);
+}
+
+.ffs-topbar .ffs-icon-btn {
+    position: relative;
+    display: inline-flex;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    border: 0;
+    border-radius: 8px;
+    background: var(--ffs-brand-pale);
+    color: var(--ffs-brand-text);
+    font-size: 19px;
+    line-height: 1;
+    text-decoration: none;
+    cursor: pointer;
+    transition: background-color .15s;
+}
+
+.ffs-topbar .ffs-icon-btn:hover {
+    background: var(--ffs-tile-hover);
+    color: var(--ffs-brand-text);
+}
+
+.ffs-btn-primary:focus-visible,
+.ffs-topbar .ffs-icon-btn:focus-visible,
+.ffs-user-chip:focus-visible {
+    outline: 2px solid var(--ffs-brand-text);
+    outline-offset: 2px;
+}
+
+.ffs-badge {
+    position: absolute;
+    top: -3px;
+    right: -3px;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    border-radius: 99px;
+    background: var(--ffs-badge);
+    color: #ffffff;
+    font-family: var(--ffs-font-body);
+    font-size: 9px;
+    font-weight: 700;
+    line-height: 16px;
+    text-align: center;
+}
+
+.ffs-badge[hidden] {
+    display: none;
+}
+
+/* User chip and menu */
+.ffs-user-chip {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    max-width: 240px;
+    padding: 6px 10px 6px 8px;
+    border: 0;
+    border-radius: 10px;
+    background: var(--ffs-brand-pale);
+    color: var(--ffs-text);
+    text-align: left;
+    cursor: pointer;
+}
+
+.ffs-avatar {
+    flex-shrink: 0;
+    width: 30px;
+    height: 30px;
+    border-radius: 99px;
+    object-fit: cover;
+}
+
+.ffs-avatar-initial {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--ffs-brand);
+    color: #ffffff;
+    font-family: var(--ffs-font-display);
+    font-size: 14px;
+    font-weight: 700;
+    line-height: 1;
+}
+
+.ffs-user-text {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.ffs-user-name,
+.ffs-user-company {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.ffs-user-name {
+    font-family: var(--ffs-font-display);
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 1.3;
+    color: var(--ffs-text);
+}
+
+.ffs-user-company {
+    font-family: var(--ffs-font-body);
+    font-size: 11px;
+    line-height: 1.3;
+    color: var(--ffs-muted);
+}
+
+.ffs-chevron {
+    flex-shrink: 0;
+    color: var(--ffs-muted);
+}
+
+.ffs-topbar .dropdown-menu.ffs-user-menu {
+    min-width: 250px;
+    padding: 8px;
+    border: 1px solid var(--ffs-border);
+    border-radius: 12px;
+    background: var(--ffs-surface);
+    box-shadow: var(--ffs-shadow-pop);
+    font-family: var(--ffs-font-body);
+}
+
+.ffs-user-menu .ffs-company {
+    padding: 6px 8px 10px;
+}
+
+.ffs-user-menu .ffs-company label {
+    display: block;
+    margin-bottom: 6px;
+    font-family: var(--ffs-font-mono);
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--ffs-muted);
+}
+
+.ffs-select {
+    width: 100%;
+    height: 36px;
+    padding: 0 30px 0 10px;
+    border: 1px solid var(--ffs-border);
+    border-radius: 8px;
+    background: var(--ffs-surface) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23937a92' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E") no-repeat right 10px center;
+    color: var(--ffs-text);
+    font-family: var(--ffs-font-body);
+    font-size: 13px;
+    font-weight: 500;
+    -webkit-appearance: none;
+    appearance: none;
+}
+
+.ffs-select:focus {
+    border-color: var(--ffs-brand-text);
+    outline: 0;
+    box-shadow: 0 0 0 3px var(--ffs-focus-ring);
+}
+
+/* .dropdown-item is kept for Bootstrap's keyboard navigation; these outrank header.css and dark-theme.css. */
+.ffs-topbar .ffs-user-menu .dropdown-item.ffs-menu-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 8px 10px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--ffs-text-body);
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 1.3;
+}
+
+.ffs-topbar .ffs-user-menu .dropdown-item.ffs-menu-item:hover,
+.ffs-topbar .ffs-user-menu .dropdown-item.ffs-menu-item:focus {
+    background: var(--ffs-brand-paler);
+    color: var(--ffs-brand-text);
+}
+
+.ffs-topbar .ffs-user-menu .dropdown-item.ffs-menu-item i {
+    font-size: 17px;
+    color: inherit;
+}
+
+.ffs-user-menu .ffs-menu-divider {
+    height: 1px;
+    margin: 6px 4px;
+    border: 0;
+    background: var(--ffs-border);
+    opacity: 1;
+}
+
+/* Notifications offcanvas */
+.ffs-offcanvas.offcanvas {
+    width: 380px;
+    max-width: 100vw;
+    border-left: 1px solid var(--ffs-border);
+    background: var(--ffs-surface);
+    color: var(--ffs-text);
+    font-family: var(--ffs-font-body);
+}
+
+.ffs-offcanvas .offcanvas-header {
+    padding: 18px 20px;
+    border-bottom: 1px solid var(--ffs-border);
+}
+
+.ffs-offcanvas .ffs-offcanvas-title {
+    margin: 0;
+    font-family: var(--ffs-font-display);
+    font-size: 16px;
+    font-weight: 700;
+    line-height: 1.3;
+    color: var(--ffs-text) !important; /* bootstrap-extended.css forces h5 to #640D5F !important */
+}
+
+html.dark-theme .ffs-offcanvas .btn-close {
+    filter: invert(1) grayscale(100%) brightness(200%);
+}
+
+.ffs-offcanvas .offcanvas-body {
+    padding: 16px 20px;
+}
+
+.ffs-tabs {
+    display: inline-flex;
+    gap: 2px;
+    margin-bottom: 14px;
+    padding: 3px;
+    border-radius: 10px;
+    background: var(--ffs-brand-pale);
+}
+
+.ffs-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--ffs-muted);
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.2;
+    cursor: pointer;
+}
+
+.ffs-tab.is-active {
+    background: var(--ffs-surface);
+    box-shadow: 0 1px 3px rgba(28, 17, 27, 0.08);
+    color: var(--ffs-brand-text);
+}
+
+.ffs-tab-count {
+    padding: 1px 6px;
+    border-radius: 99px;
+    background: var(--ffs-brand-paler);
+    font-family: var(--ffs-font-mono);
+    font-size: 10px;
+    font-weight: 500;
+}
+
+.ffs-notices {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.ffs-notice {
+    display: flex;
+    gap: 12px;
+    padding: 12px;
+    border: 1px solid var(--ffs-border);
+    border-radius: 10px;
+}
+
+.ffs-notice-icon {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    border-radius: 8px;
+    background: var(--ffs-brand-pale);
+    color: var(--ffs-brand-text);
+    font-size: 17px;
+}
+
+.ffs-notice-body {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.ffs-notice-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.ffs-notice-name {
+    overflow: hidden;
+    font-family: var(--ffs-font-display);
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 1.3;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    color: var(--ffs-text);
+}
+
+.ffs-notice-time {
+    flex-shrink: 0;
+    font-size: 11px;
+    color: var(--ffs-muted);
+}
+
+.ffs-notice-text {
+    margin: 4px 0 0;
+    font-size: 12.5px;
+    line-height: 1.45;
+    overflow-wrap: anywhere;
+    color: var(--ffs-text-body);
+}
+
+.ffs-notices-empty {
+    margin: 0;
+    padding: 24px 0;
+    font-size: 13px;
+    text-align: center;
+    color: var(--ffs-muted);
+}
+
+/* ------------------------------------------------------------------ responsive */
+
+@media screen and (max-width: 1399.98px) {
+    .ffs-topbar {
+        gap: 12px;
+        padding: 0 24px;
+    }
+}
+
+@media screen and (max-width: 1199.98px) {
+    .ffs-search-slot {
+        display: none;
+    }
+}
+
+/* Below 1025px the sidebar is an off-canvas drawer (app.css); the footer button closes it. */
+@media screen and (max-width: 1024px) {
+    .wrapper .ffs-topbar .mobile-toggle-menu {
+        display: inline-flex;
+    }
+
+    .ffs-topbar {
+        padding: 0 16px;
+    }
+
+    .ffs-collapse-text,
+    .ffs-expand-text {
+        display: none;
+    }
+
+    .ffs-close-text {
+        display: inline;
+    }
+
+    html body .wrapper.toggled .sidebar-wrapper.ffs-sidebar {
+        box-shadow: 0 0 40px rgba(28, 17, 27, 0.25);
+    }
+}
+
+@media screen and (max-width: 767.98px) {
+    .ffs-topbar .ffs-title {
+        font-size: 17px;
+    }
+
+    .ffs-user-text,
+    .ffs-chevron,
+    .ffs-btn-text {
+        display: none;
+    }
+
+    .ffs-user-chip {
+        padding: 3px;
+    }
+
+    .ffs-btn-primary {
+        justify-content: center;
+        width: 36px;
+        height: 36px;
+        padding: 0;
+    }
+}
+
+@media screen and (max-width: 575.98px) {
+    .ffs-topbar {
+        gap: 8px;
+        padding: 0 12px;
+    }
+
+    .ffs-actions {
+        gap: 6px;
+    }
+
+    .ffs-topbar .ffs-date {
+        display: none;
+    }
+
+    .ffs-topbar .ffs-icon-btn,
+    .ffs-btn-primary {
+        width: 34px;
+        height: 34px;
+    }
+}

@@ -122,10 +122,9 @@ html.dark-theme .ffd {
 
 /*
  * bootstrap-extended.css forces every h1-h6 to #640D5F !important (all pages).
- * The dashboard's titles use the design's text colour, so these four win back
+ * The dashboard's titles use the design's text colour, so these three win back
  * with a scoped !important. Nothing outside .ffd is affected.
  */
-.ffd .ffd-page-title,
 .ffd .ffd-panel-title,
 .ffd .ffd-insight-title,
 .ffd .ffd-offcanvas-title {
@@ -142,28 +141,14 @@ html.dark-theme .ffd {
 
 /* ------------------------------------------------------------- page header */
 
+/* The page title, date and Refresh live in the app shell's top bar (app-shell.css). */
 .ffd-page-head {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    justify-content: space-between;
+    justify-content: flex-end;
     gap: 16px;
     margin-bottom: 26px;
-}
-
-.ffd .ffd-page-title {
-    font-family: var(--ffd-font-display);
-    font-weight: 700;
-    font-size: 20px;
-    line-height: 1.25;
-    letter-spacing: -0.4px;
-    color: var(--ffd-text);
-}
-
-.ffd .ffd-page-date {
-    margin-top: 2px;
-    font-size: 12px;
-    color: var(--ffd-muted);
 }
 
 .ffd-page-actions {
