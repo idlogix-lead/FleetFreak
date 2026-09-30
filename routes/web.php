@@ -70,7 +70,7 @@ use Illuminate\Support\Facades\Route;
 
 Auth::routes(['register' => false]);
 
-Route::get('/map',function(){
+Route::get('/map', function () {
     return view('home_dashboard.test_map');
 });
 // Route::get('veh', function () {
@@ -263,7 +263,7 @@ Route::group(['middleware' => ['auth', 'afterauth']], function () {
     // car company:
     Route::resource('vehicle-companies', VehicleCompanyController::class);
     // ------------------------------inventories modules----------------------------------
-    
+
     Route::resource('manufacturing-companies', ManufacturingCompanyController::class);
     Route::resource('brands', BrandController::class);
     Route::resource('ware-houses', WareHouseController::class);

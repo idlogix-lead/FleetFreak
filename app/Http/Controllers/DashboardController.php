@@ -31,12 +31,14 @@ use App\Models\User;
 
 class DashboardController extends Controller
 {
-    function __construct(){
+    function __construct()
+    {
         $this->middleware('RolePermissions');
     }
-    public function index(Request $request){
+    public function index(Request $request)
+    {
         // super admin dashboard
-        if(auth()->user()->actor_id==1){
+        if (auth()->user()->actor_id == 1) {
             return view('home_dashboard.superadmin_dashboard');
         }
         // admin filters
@@ -50,7 +52,7 @@ class DashboardController extends Controller
         $toDate = $request->input('to_date');
         $countryquery = $request->input('country');
         $query = OrderDetail::query();
-        if(auth()->user()->actor_id == 2 & $agentId!=null){
+        if (auth()->user()->actor_id == 2 & $agentId != null) {
             $agentName = Partner::where('id', $agentId)->first()->company_name;
         }
 
@@ -58,9 +60,8 @@ class DashboardController extends Controller
         // Apply filters if present
         if ($agentId) {
 
-            $query = $query->whereHas('order', function($q) use ($agentId) {
+            $query = $query->whereHas('order', function ($q) use ($agentId) {
                 $q->where('business_partner_id', $agentId);
-
             });
         }
 
@@ -86,8 +87,8 @@ class DashboardController extends Controller
         $unapprovedOrders = OrderDetail::unapprovedOrders(clone $query);
         $cancelOrders = OrderDetail::cancelOrders(clone $query);
         $incompleteOrders = OrderDetail::incompleteOrders(clone $query);
-        $incompleteOrdersWithDriver=OrderDetail::incompleteOrdersWithDriver(clone $query);
-        $incompleteOrderWithoutDriver=OrderDetail::incompleteOrdersWithoutDriver(clone $query);
+        $incompleteOrdersWithDriver = OrderDetail::incompleteOrdersWithDriver(clone $query);
+        $incompleteOrderWithoutDriver = OrderDetail::incompleteOrdersWithoutDriver(clone $query);
 
 
         // fetch the filtered orders for agent
@@ -102,30 +103,30 @@ class DashboardController extends Controller
         // ------------
         $company_id = auth()->user()->active_company();
 
-        $unbookedCount = Vehicle::whereDoesntHave('orderDetails')->orWhereHas('orderDetails', function($query) {
+        $unbookedCount = Vehicle::whereDoesntHave('orderDetails')->orWhereHas('orderDetails', function ($query) {
             $query->whereIn('status', ['paid', 'completed']);
         })->count();
         // for count
-        $bookedCount = Vehicle::whereHas('orderDetails', function($query) {
-            $query->where('status', 'incomplete')->where('date',Carbon::today());
+        $bookedCount = Vehicle::whereHas('orderDetails', function ($query) {
+            $query->where('status', 'incomplete')->where('date', Carbon::today());
         })->count();
         // for getting records:
-        $vehicle_assignments = OrderDetail::where('company_id',$company_id)->where('status', 'incomplete')->where('date',Carbon::today())->get();
+        $vehicle_assignments = OrderDetail::where('company_id', $company_id)->where('status', 'incomplete')->where('date', Carbon::today())->get();
         // dd($vehicle_assignments);
         // daily rides
-       // Apply country filter to dailyrides
-        $dailyridesQuery = OrderDetail::with('vehicle','rate_list')
-        ->where('company_id', $company_id)
-        ->where('status', 'incomplete')
-        ->whereNotNull('rate_list_id')
-        ->whereDate('date', Carbon::today())
-        ->when($countryquery ,function($q) use ($countryquery){
-            $q->whereHas('order.partner_customer',function($qr) use($countryquery){
-                $qr->where('country',$countryquery);
-            });
-            // dd($countryquery);
+        // Apply country filter to dailyrides
+        $dailyridesQuery = OrderDetail::with('vehicle', 'rate_list')
+            ->where('company_id', $company_id)
+            ->where('status', 'incomplete')
+            ->whereNotNull('rate_list_id')
+            ->whereDate('date', Carbon::today())
+            ->when($countryquery, function ($q) use ($countryquery) {
+                $q->whereHas('order.partner_customer', function ($qr) use ($countryquery) {
+                    $qr->where('country', $countryquery);
+                });
+                // dd($countryquery);
 
-        });
+            });
 
         // if ($countryquery) {
         //     dd($countryquery);
@@ -154,7 +155,7 @@ class DashboardController extends Controller
 
             // Get vehicle details (assuming vehicle model and number are concatenated)
             // dd($rides->first()->vehicleModel->name);
-            $vehicleDetails = $rides->first()->vehicle->vehicleModel->name. ' ' . $rides->first()->vehicle_no;
+            $vehicleDetails = $rides->first()->vehicle->vehicleModel->name . ' ' . $rides->first()->vehicle_no;
 
 
             $vehicleCount = $rides->count();
@@ -162,59 +163,57 @@ class DashboardController extends Controller
             // Push data to $vehicleBookings array
             $vehicleBookings[] = [
                 'x' => $vehicleDetails ?? 'Unknown Vehicle',
-                'y' => round($totalEstimatedTime / 60,2),
+                'y' => round($totalEstimatedTime / 60, 2),
                 'vehiclesCount' => $vehicleCount,
             ];
-
         }
         // $company_id = auth()->user()->active_company();
 
 
         $orderDetailsWithVehicle = OrderDetail::whereNotNull('vehicle_id')
-        ->where('company_id', $company_id)
-        ->whereIn('status',['incomplete','in_progress'])->whereBetween('date', [Carbon::today(), Carbon::today()->addDays(7)])->get();
+            ->where('company_id', $company_id)
+            ->whereIn('status', ['incomplete', 'in_progress'])->whereBetween('date', [Carbon::today(), Carbon::today()->addDays(7)])->get();
         // $allcustomer = Partner::where('actor_id',6)->get();
         // -------------getting top agents with highest sales----------
         $topAgents = Partner::whereHas('orders_agent.order_details', function ($query) use ($company_id) {
             $query->where('status', 'completed')->where('company_id', $company_id);
-
         })
-        ->where('actor_id', 4)->get()
-        ->map(function($partner) {
-            $totalSales = $partner->orders_agent->sum(function($order) {
-                return $order->order_details->sum('rate');
-            });
-            return [
-                'agent_name' => $partner->name, // Adjust according to your column name
-                'total_sales' => $totalSales,
-            ];
-        })
+            ->where('actor_id', 4)->get()
+            ->map(function ($partner) {
+                $totalSales = $partner->orders_agent->sum(function ($order) {
+                    return $order->order_details->sum('rate');
+                });
+                return [
+                    'agent_name' => $partner->name, // Adjust according to your column name
+                    'total_sales' => $totalSales,
+                ];
+            })
 
-        ->sortByDesc('total_sales')
-        ->take(5);
+            ->sortByDesc('total_sales')
+            ->take(5);
         $company_id = auth()->user()->active_company();
 
         // -----------------------End-------------------------------
         // dd($topAgents);
-        $unpaidrides = OrderDetail::whereHas('order', function($queryBuilder) {
+        $unpaidrides = OrderDetail::whereHas('order', function ($queryBuilder) {
             $queryBuilder->where('overall_status', 'approved');
-        })->where('status','completed')->count();
-        $paidrides = OrderDetail::whereHas('order', function($queryBuilder) {
+        })->where('status', 'completed')->count();
+        $paidrides = OrderDetail::whereHas('order', function ($queryBuilder) {
             $queryBuilder->where('overall_status', 'approved');
-        })->where('status','paid')->count();
-        $drivers = Partner::where('actor_id',5)
-        ->where('company_id', $company_id)
-        ->get();
-        $employees = Partner::where('actor_id',7)->get();
+        })->where('status', 'paid')->count();
+        $drivers = Partner::where('actor_id', 5)
+            ->where('company_id', $company_id)
+            ->get();
+        $employees = Partner::where('actor_id', 7)->get();
         // for agent:
-        $agentallcustomer = Partner::where('actor_id',6)->where('business_partner_id',auth()->user()->partner_id)->get();
+        $agentallcustomer = Partner::where('actor_id', 6)->where('business_partner_id', auth()->user()->partner_id)->get();
 
-            // only run when login user is agent
-            if(auth()->user()->actor_id ==4 ){
+        // only run when login user is agent
+        if (auth()->user()->actor_id == 4) {
 
-                $agentQuery = auth()->user()->partner_id;
-                $fromDate = Carbon::now()->subDays(7)->startOfDay();
-                $toDate = Carbon::now()->endOfDay();
+            $agentQuery = auth()->user()->partner_id;
+            $fromDate = Carbon::now()->subDays(7)->startOfDay();
+            $toDate = Carbon::now()->endOfDay();
             // Opening line summary query before fromDate
             $openingSummaryQuery = Order::query()
                 ->select(
@@ -330,46 +329,44 @@ class DashboardController extends Controller
 
             // Execute the complete query
             $ledgerEntries = $subquerySql->toArray();
-
-            }
-            else{
-                $ledgerEntries = null;
-            }
-            // -----------------------------------
+        } else {
+            $ledgerEntries = null;
+        }
+        // -----------------------------------
 
 
         return view('home_dashboard.dashboard', [
             'unbookedCount' => $unbookedCount,
             'bookedCount' => $bookedCount,
-            'vehicle_assignments'=>$vehicle_assignments,
-            'orderDetailsWithVehicle'=> $orderDetailsWithVehicle,
-            'topAgents'=> $topAgents,
-            'unpaidrides'=>$unpaidrides,
-            'paidrides'=>$paidrides,
-            'drivers'=>$drivers,
-            'employees'=>$employees,
+            'vehicle_assignments' => $vehicle_assignments,
+            'orderDetailsWithVehicle' => $orderDetailsWithVehicle,
+            'topAgents' => $topAgents,
+            'unpaidrides' => $unpaidrides,
+            'paidrides' => $paidrides,
+            'drivers' => $drivers,
+            'employees' => $employees,
             // for agent
-            'agentallcustomer'=> $agentallcustomer,
-            'agenttotalOrders'=>$agenttotalOrders,
-            'agentcompletedOrders'=>$agentcompletedOrders,
-            'agentpendingOrders'=>$agentpendingOrders,
-            'agentapprovedOrders'=>$agentapprovedOrders,
-            'agentcancelOrders'=>$agentcancelOrders,
-            'agentincompleteOrders'=>$agentincompleteOrders,
-            'agentunapprovedOrders'=>$agentunapprovedOrders,
+            'agentallcustomer' => $agentallcustomer,
+            'agenttotalOrders' => $agenttotalOrders,
+            'agentcompletedOrders' => $agentcompletedOrders,
+            'agentpendingOrders' => $agentpendingOrders,
+            'agentapprovedOrders' => $agentapprovedOrders,
+            'agentcancelOrders' => $agentcancelOrders,
+            'agentincompleteOrders' => $agentincompleteOrders,
+            'agentunapprovedOrders' => $agentunapprovedOrders,
             // for admin
-            'totalOrders'=>$totalOrders,
-            'completedOrders'=>$completedOrders,
-            'pendingOrders'=>$pendingOrders,
-            'approvedOrders'=>$approvedOrders,
-            'unapprovedOrders'=>$unapprovedOrders,
-            'cancelOrders'=>$cancelOrders,
-            'incompleteOrders'=>$incompleteOrders,
+            'totalOrders' => $totalOrders,
+            'completedOrders' => $completedOrders,
+            'pendingOrders' => $pendingOrders,
+            'approvedOrders' => $approvedOrders,
+            'unapprovedOrders' => $unapprovedOrders,
+            'cancelOrders' => $cancelOrders,
+            'incompleteOrders' => $incompleteOrders,
             'vehicleBookings' => $vehicleBookings,
-            'ledgerEntries'=>$ledgerEntries,
-            'agentName'=>$agentName ?? '',
-            'incompleteOrdersWithDriver'=>$incompleteOrdersWithDriver,
-            'incompleteOrderWithoutDriver'=>$incompleteOrderWithoutDriver
+            'ledgerEntries' => $ledgerEntries,
+            'agentName' => $agentName ?? '',
+            'incompleteOrdersWithDriver' => $incompleteOrdersWithDriver,
+            'incompleteOrderWithoutDriver' => $incompleteOrderWithoutDriver
 
 
         ]);
@@ -712,7 +709,8 @@ class DashboardController extends Controller
         ]);
     }
 
-    public function admin_rides_window(Request $request, $ordertype){
+    public function admin_rides_window(Request $request, $ordertype)
+    {
         $queryAgent = $request->input('agent');
 
         $fromDate = $request->input('date');
@@ -722,11 +720,11 @@ class DashboardController extends Controller
 
         // Apply filters based on the request inputs
         if ($queryAgent) {
-            $orders->whereHas('order', function($query) use ($queryAgent) {
+            $orders->whereHas('order', function ($query) use ($queryAgent) {
                 $query->where('business_partner_id', $queryAgent);
             });
         }
-         if ($fromDate && $toDate) {
+        if ($fromDate && $toDate) {
             $orders->whereBetween('date', [$fromDate, $toDate]);
         } elseif ($fromDate) {
             $orders->whereDate('date', '>=', $fromDate);
@@ -739,26 +737,26 @@ class DashboardController extends Controller
         // }
 
         // Apply order type filter
-        if($ordertype == 'total-orders'){
+        if ($ordertype == 'total-orders') {
             $orders = $orders->paginate(10);
         }
-        if($ordertype == 'pending-orders'){
-            $orders = $orders->where('status','pending')->paginate(10);
+        if ($ordertype == 'pending-orders') {
+            $orders = $orders->where('status', 'pending')->paginate(10);
         }
-        if($ordertype == 'incomplete-orders'){
-            $orders = $orders->where('status','incomplete')->paginate(10);
+        if ($ordertype == 'incomplete-orders') {
+            $orders = $orders->where('status', 'incomplete')->paginate(10);
         }
-        if($ordertype == 'completed-orders'){
-            $orders = $orders->where('status','completed')->paginate(10);
+        if ($ordertype == 'completed-orders') {
+            $orders = $orders->where('status', 'completed')->paginate(10);
         }
-        if($ordertype == 'approved-orders'){
-            $orders = $orders->where('status','approved')->paginate(10);
+        if ($ordertype == 'approved-orders') {
+            $orders = $orders->where('status', 'approved')->paginate(10);
         }
-        if($ordertype == 'unapproved-orders'){
-            $orders = $orders->where('status','unapproved')->paginate(10);
+        if ($ordertype == 'unapproved-orders') {
+            $orders = $orders->where('status', 'unapproved')->paginate(10);
         }
-        if($ordertype == 'cancelled-orders'){
-            $orders = $orders->where('status','cancelled')->paginate(10);
+        if ($ordertype == 'cancelled-orders') {
+            $orders = $orders->where('status', 'cancelled')->paginate(10);
         }
 
         return view('home_dashboard.total-order', compact('orders', 'ordertype'))
@@ -767,26 +765,29 @@ class DashboardController extends Controller
 
     //  Apply Excel for admin
 
-    public function export_orders(){
+    public function export_orders()
+    {
 
         return Excel::download(new ExportOrder, 'orders.xlsx');
-
     }
-    public function overall_export_pending_orders(){
+    public function overall_export_pending_orders()
+    {
 
         return Excel::download(new OverallExportPendingOrder, 'orders.xlsx');
-
     }
 
-    public function export_pending_orders(){
+    public function export_pending_orders()
+    {
 
         return Excel::download(new ExportPendingOrder, 'pending_orders.xlsx');
     }
-    public function export_incomplete_orders(){
+    public function export_incomplete_orders()
+    {
 
         return Excel::download(new ExportIncompleteOrder, 'incomplete_orders.xlsx');
     }
-    public function export_completed_orders(){
+    public function export_completed_orders()
+    {
 
         return Excel::download(new ExportCompletedOrder, 'completed_orders.xlsx');
     }
@@ -807,43 +808,47 @@ class DashboardController extends Controller
     }
 
     // apply excel for agent:
-        public function agent_export_orders(){
+    public function agent_export_orders()
+    {
 
-            return Excel::download(new ExportAgentOrder, 'orders.xlsx');
+        return Excel::download(new ExportAgentOrder, 'orders.xlsx');
+    }
+    public function overall_agent_export_pending_orders()
+    {
 
-        }
-        public function overall_agent_export_pending_orders(){
+        return Excel::download(new OverallExportAgentPendingOrder, 'pending_orders.xlsx');
+    }
 
-            return Excel::download(new OverallExportAgentPendingOrder, 'pending_orders.xlsx');
-        }
+    public function agent_export_pending_orders()
+    {
 
-        public function agent_export_pending_orders(){
+        return Excel::download(new ExportAgentPendingOrder, 'pending_orders.xlsx');
+    }
+    public function agent_export_incomplete_orders()
+    {
 
-            return Excel::download(new ExportAgentPendingOrder, 'pending_orders.xlsx');
-        }
-        public function agent_export_incomplete_orders(){
+        return Excel::download(new ExportAgentIncompleteOrder, 'incomplete_orders.xlsx');
+    }
+    public function agent_export_completed_orders()
+    {
 
-            return Excel::download(new ExportAgentIncompleteOrder, 'incomplete_orders.xlsx');
-        }
-        public function agent_export_completed_orders(){
+        return Excel::download(new ExportAgentCompletedOrder, 'completed_orders.xlsx');
+    }
+    public function agent_export_approved_orders()
+    {
 
-            return Excel::download(new ExportAgentCompletedOrder, 'completed_orders.xlsx');
-        }
-        public function agent_export_approved_orders()
-        {
+        return Excel::download(new ExportAgentApprovedOrder, 'approved_orders.xlsx');
+    }
+    public function agent_export_cancel_orders()
+    {
 
-            return Excel::download(new ExportAgentApprovedOrder, 'approved_orders.xlsx');
-        }
-        public function agent_export_cancel_orders()
-        {
+        return Excel::download(new ExportAgentCancelOrder, 'cancel_orders.xlsx');
+    }
+    public function agent_export_unapproved_orders()
+    {
 
-            return Excel::download(new ExportAgentCancelOrder, 'cancel_orders.xlsx');
-        }
-        public function agent_export_unapproved_orders()
-        {
-
-            return Excel::download(new ExportAgentUnapprovedOrder, 'unapproved_orders.xlsx');
-        }
+        return Excel::download(new ExportAgentUnapprovedOrder, 'unapproved_orders.xlsx');
+    }
 
 
 
@@ -949,7 +954,8 @@ class DashboardController extends Controller
     // }
 
     // filter ride status from saba
-     public function agent_rides_window(Request $request, $ordertype){
+    public function agent_rides_window(Request $request, $ordertype)
+    {
         $company_id = auth()->user()->active_company();
 
         // dd($company);
@@ -966,7 +972,7 @@ class DashboardController extends Controller
         // dd($orders);
 
         // Apply filters based on the request inputs
-        if($status){
+        if ($status) {
 
             // $cleanStatus = strtok($status, '-');
             // dd($cleanStatus);
@@ -980,24 +986,22 @@ class DashboardController extends Controller
             // })->where('status',$cleanStatus)->paginate(10);
         }
 
-        if ($company_id ) {
-            $orders->whereHas('order', function($query) use ($company_id ) {
-                $query->where('company_id', $company_id );
+        if ($company_id) {
+            $orders->whereHas('order', function ($query) use ($company_id) {
+                $query->where('company_id', $company_id);
             });
         }
-         if ($fromDate && $toDate) {
-            $orders->whereHas('order',function($query) use ($company_id){
+        if ($fromDate && $toDate) {
+            $orders->whereHas('order', function ($query) use ($company_id) {
                 $query->where('company_id', $company_id);
             })->whereBetween('date', [$fromDate, $toDate]);
-
         } elseif ($fromDate) {
-            $orders->whereHas('order',function($query)  use ($company_id){
+            $orders->whereHas('order', function ($query)  use ($company_id) {
                 $query->where('company_id', $company_id);
             })->whereDate('date', '>=', $fromDate);
         } elseif ($toDate) {
-            $orders->whereHas('order',function($query) use ($company_id){
+            $orders->whereHas('order', function ($query) use ($company_id) {
                 $query->where('company_id', $company_id);
-
             })->whereDate('date', '<=', $toDate);
         }
 
@@ -1008,67 +1012,64 @@ class DashboardController extends Controller
         // dd($ordertype);
 
         // Apply order type filter
-        if($ordertype == 'total-orders'){
+        if ($ordertype == 'total-orders') {
             // dd($ordertype);
-            $orders = $orders->whereHas('order',function($query) use ($company_id){
+            $orders = $orders->whereHas('order', function ($query) use ($company_id) {
                 $query->where('company_id', $company_id);
             })->paginate(10);
         }
-        if($ordertype == 'pending-orders'){
-            $orders = $orders->whereHas('order',function($query) use($company_id){
+        if ($ordertype == 'pending-orders') {
+            $orders = $orders->whereHas('order', function ($query) use ($company_id) {
                 $query->where('company_id', $company_id);
-            })->where('status','pending')->paginate(10);
+            })->where('status', 'pending')->paginate(10);
         }
-        if($ordertype == 'incomplete-orders'){
-            $orders = $orders->whereHas('order',function($query) use($company_id){
+        if ($ordertype == 'incomplete-orders') {
+            $orders = $orders->whereHas('order', function ($query) use ($company_id) {
                 $query->where('company_id', $company_id);
-            })->where('status','incomplete')->paginate(10);
+            })->where('status', 'incomplete')->paginate(10);
         }
-        if($ordertype == 'completed-orders'){
+        if ($ordertype == 'completed-orders') {
             // dd($ordertype);
-            $orders = $orders->whereHas('order',function($query) use($company_id){
+            $orders = $orders->whereHas('order', function ($query) use ($company_id) {
                 $query->where('company_id', $company_id);
-            })->where('status','completed')->paginate(10);
+            })->where('status', 'completed')->paginate(10);
         }
-        if($ordertype == 'approved-orders'){
-            $orders = $orders->whereHas('order',function($query) use($company_id){
+        if ($ordertype == 'approved-orders') {
+            $orders = $orders->whereHas('order', function ($query) use ($company_id) {
                 $query->where('company_id', $company_id);
-            })->where('status','approved')->paginate(10);
+            })->where('status', 'approved')->paginate(10);
         }
-        if($ordertype == 'unapproved-orders'){
-            $orders = $orders->whereHas('order',function($query) use($company_id){
+        if ($ordertype == 'unapproved-orders') {
+            $orders = $orders->whereHas('order', function ($query) use ($company_id) {
                 $query->where('company_id', $company_id);
-            })->where('status','unapproved')->paginate(10);
+            })->where('status', 'unapproved')->paginate(10);
         }
-        if($ordertype == 'cancelled-orders'){
-            $orders = $orders->whereHas('order',function($query) use($company_id){
+        if ($ordertype == 'cancelled-orders') {
+            $orders = $orders->whereHas('order', function ($query) use ($company_id) {
                 $query->where('company_id', $company_id);
-            })->where('status','cancelled')->paginate(10);
+            })->where('status', 'cancelled')->paginate(10);
         }
         // to define all statuses in dropdown:
 
-        $statuses = ['total-orders','pending-orders', 'approved-orders', 'unapproved-orders', 'completed-orders', 'cancelled-orders', 'incomplete-orders'];
+        $statuses = ['total-orders', 'pending-orders', 'approved-orders', 'unapproved-orders', 'completed-orders', 'cancelled-orders', 'incomplete-orders'];
 
-        return view('agent-rides-status.index', compact('orders', 'ordertype','fromDate','toDate','statuses'))
+        return view('agent-rides-status.index', compact('orders', 'ordertype', 'fromDate', 'toDate', 'statuses'))
             ->with('i', (request()->input('page', 1) - 1) * $orders->perPage());
     }
 
 
-    public function total_rides(){
+    public function total_rides()
+    {
         $company_id = auth()->user()->active_company();
-        $ordertype='total-orders';
-        $statuses = ['total-orders','pending-orders', 'approved-orders', 'unapproved-orders', 'completed-orders', 'cancelled-orders', 'incomplete-orders'];
+        $ordertype = 'total-orders';
+        $statuses = ['total-orders', 'pending-orders', 'approved-orders', 'unapproved-orders', 'completed-orders', 'cancelled-orders', 'incomplete-orders'];
 
 
         // dd($ordertype);
         $orders = OrderDetail::whereHas('order', function ($query) use ($company_id) {
             $query->where('company_id', $company_id);
         })->paginate(10);
-        return view('agent-rides-status.index', compact('orders','ordertype','statuses'))
+        return view('agent-rides-status.index', compact('orders', 'ordertype', 'statuses'))
             ->with('i', (request()->input('page', 1) - 1) * $orders->perPage());
     }
-
-
-
-
 }
