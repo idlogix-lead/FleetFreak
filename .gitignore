@@ -16,3 +16,6 @@ yarn-error.log
 !.gitignore
 firebase_credentials.json
 .phpunit.cache/
+
+# Local MCP server config (may hold credentials) - never commit
+.mcp.json

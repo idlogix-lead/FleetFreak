@@ -405,6 +405,30 @@ Pre-existing, unrelated to this program (noticed during verification):
   external scheduler ticks. Investigate when convenient.
 - **GitHub push blocked**: 403 for `moeenidl` on
   `idlogix-lead/FleetFreak`. Client must fix access; then push `moeen`.
+- **"Format on save" produces huge noise diffs (2026-09-30).** `DashboardController.php`, `routes/web.php` and
+  `public/assets/css/app.css` showed up as heavily modified (app.css alone: 2671 lines removed, 226 added) with no
+  intentional edit behind it. Checked and ruled out as the cause: no `.prettierrc`/`prettier.config.*` anywhere, no
+  `prettier` in `package.json` or `node_modules`, and **no `.vscode/settings.json` exists at all**, tracked or not
+  (`.vscode/` is gitignored, but the folder isn't even present on disk). So nothing in this repo enables or
+  configures it — it's the editor's own **global** "format on save" setting (VS Code's built-in CSS formatter, going
+  by the exact signature below), which can fire again for anyone who has that on, on any machine, independent of
+  this repo.
+  - **Signature of this specific formatter** (useful for spotting it again fast): CSS — single quotes to double,
+    `.5px` to `0.5px` (adds a leading zero), `0.70` to `0.7` (trims a trailing zero), `li+li` to `li + li` (spaces
+    around `>`/`+`), `#640D5F` to `#640d5f` (hex lowercased), long selectors/values wrapped onto multiple lines,
+    blank lines between declarations collapsed. PHP — brace-on-own-line, a space after `if`/`function`/`foreach`,
+    spaces around `.`/`,` in expressions and argument lists. No selector, property, value, or logic ever changed.
+  - **How to confirm a diff is formatter-only before spending time reading it, instead of eyeballing a huge diff:**
+    for PHP, tokenize both versions and drop whitespace/comment tokens —
+    `token_get_all($src)`, filter out `T_WHITESPACE`/`T_COMMENT`/`T_DOC_COMMENT`, compare the arrays (expect
+    identical, aside from the opening `<?php` tag's line ending — this repo is `autocrlf=true`, so LF in the git
+    blob vs. CRLF in the working copy is expected there and nowhere else). For CSS, there's no equivalent built-in
+    tokenizer handy, so normalize both versions the same way (lowercase, add leading zeros before a bare `.digit`,
+    trim trailing zeros, collapse whitespace, strip blank lines) and diff the result; if anything real changed, it
+    survives that normalization.
+  - Not fixed, and not this session's call to make: turning "format on save" off for this workspace, or going the
+    other way and checking in a `.prettierrc` plus a one-time full-repo reformat, so future diffs stay quiet either
+    way. Flag it to whoever owns the editor setup.
 
 Behavior changes shipped in Phase 1 (communicate to the client/users):
 - `/ledgers` and the driver-ledger pages now WORK on PostgreSQL (previously
