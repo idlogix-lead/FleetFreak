@@ -6,20 +6,19 @@
     | PLACEHOLDER DATA - sample values copied from the Figma design
     |--------------------------------------------------------------------------
     | Every value below is fake. This array is the ONLY source of sample data on
-    | this page: each component tagged SAMPLE reads from here and nowhere else.
+    | this page: each card marked SAMPLE reads from here and nowhere else.
     | Phase 7 replaces this array with real sources; the markup stays as it is.
     | Checklist: docs/design-tokens-dashboard.md
     */
     $placeholderData = [
         'kpis' => [
-            'total_vehicles' => ['value' => '148', 'change' => '+3', 'positive' => true, 'sub' => 'Fleet assets'],
-            // Value is real (Vehicle::countByStatus); only the badge and sub-label are samples.
+            // Total Vehicles, Active Vehicles and Total Drivers show real values ($kpiTiles below);
+            // only their change badges and sub-labels are samples.
+            'total_vehicles' => ['change' => '+3', 'positive' => true, 'sub' => 'Fleet assets'],
             'active_vehicles' => ['change' => '+5', 'positive' => true, 'sub' => '75.7% utilization'],
             'in_maintenance' => ['value' => '14', 'change' => '+2', 'positive' => false, 'sub' => '9.5% of fleet'],
-            // Value is real ($drivers->count()); only the badge and sub-label are samples.
             'total_drivers' => ['change' => '+4', 'positive' => true, 'sub' => 'Certified & active'],
             'monthly_revenue' => ['value' => '$84,320', 'change' => '+12%', 'positive' => true, 'sub' => 'vs last month'],
-            'overdue_tasks' => ['value' => '7', 'change' => '-1', 'positive' => true, 'sub' => 'Needs attention'],
         ],
         'mileage' => [
             'period' => 'Last 6 months',
@@ -69,9 +68,8 @@
     ];
 
     $isAdmin = auth()->user()->actor_id == 2;
-    $filterFrom = request()->input('date');
-    $filterTo = request()->input('to_date');
-    $sampleTag = '<span class="ffd-sample" title="Sample data &mdash; replaced in Phase 7">Sample</span>';
+    // One SAMPLE chip per card; its tooltip says which parts of the card are samples.
+    $sampleChip = fn (string $what) => '<span class="ffd-sample" title="' . e($what) . '">Sample</span>';
 @endphp
 
 @section('style')
@@ -81,198 +79,60 @@
 @endsection
 
 @section('wrapper')
-    {{-- Loaded here (inside body) so it comes after Bootstrap and app.css in the cascade. --}}
-    <link rel="stylesheet" href="{{ asset('assets/css/main-dashboard.css') }}">
+    {{-- Loaded here (inside body) so it comes after Bootstrap and app.css in the cascade.
+         ?v= is the file's modified time, so a changed file is never served from an old browser cache. --}}
+    <link rel="stylesheet" href="{{ asset('assets/css/main-dashboard.css') }}?v={{ filemtime(public_path('assets/css/main-dashboard.css')) }}">
 
     <div class="ffd">
-
-        {{-- Page header: the title, date and Refresh are in the app shell's top bar (layouts/header.blade.php) --}}
-        <div class="ffd-page-head">
-            <div class="ffd-page-actions">
-                @if (!empty($agentName))
-                    <span class="ffd-chip" id="ffd-agent-chip">{{ $agentName }}</span>
-                @endif
-                @if ($filterFrom || $filterTo)
-                    <span class="ffd-chip ffd-chip-muted">{{ $filterFrom ?: '...' }} &rarr; {{ $filterTo ?: '...' }}</span>
-                @endif
-                <button type="button" class="ffd-btn ffd-btn-soft" data-bs-toggle="offcanvas" data-bs-target="#ffd-filter" aria-controls="ffd-filter">
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>
-                    Filter
-                </button>
-            </div>
-        </div>
-
-        {{-- Filter panel: same fields and GET parameters as the old dashboard --}}
-        <div class="offcanvas offcanvas-end ffd-offcanvas" tabindex="-1" id="ffd-filter" aria-labelledby="ffd-filter-title">
-            <div class="offcanvas-header">
-                <h2 class="ffd-offcanvas-title" id="ffd-filter-title">Filter dashboard</h2>
-                <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
-            </div>
-            <div class="offcanvas-body">
-                <form method="GET" action="{{ url()->current() }}" class="ffd-filter-form">
-                    @if ($isAdmin)
-                        <div class="ffd-field">
-                            <label for="ffd-agent">Agent</label>
-                            <select name="agent" class="form-select ffd-input" id="ffd-agent">
-                                <option value="">Search by agent name...</option>
-                                @php
-                                    $businessPartners = App\Models\Partner::BusinessPartnerDropdown();
-                                @endphp
-                                @foreach ($businessPartners as $business_partner)
-                                    <option value="{{ $business_partner->id }}"
-                                        {{ request()->input('agent') == $business_partner->id ? 'selected' : '' }}>
-                                        {{ Str::title($business_partner->company_name) }}</option>
-                                @endforeach
-                            </select>
-                            <input type="hidden" name="agent_id" value="{{ request()->input('agent') }}">
-                            <input type="hidden" name="agent_name" value="{{ request()->input('agent_name') }}">
-                        </div>
-                    @endif
-                    <div class="ffd-field">
-                        <label for="ffd-date">From Date</label>
-                        <input type="date" name="date" class="form-control ffd-input" id="ffd-date" value="{{ request()->input('date') }}">
-                    </div>
-                    <div class="ffd-field">
-                        <label for="ffd-to-date">To Date</label>
-                        <input type="date" name="to_date" class="form-control ffd-input" id="ffd-to-date" value="{{ request()->input('to_date') }}">
-                    </div>
-                    <div class="ffd-filter-actions">
-                        <button type="submit" class="ffd-btn ffd-btn-primary">Search</button>
-                        <button type="button" class="ffd-btn ffd-btn-soft" id="ffd-filter-reset">Reset</button>
-                    </div>
-                </form>
-            </div>
-        </div>
-
-        <div class="ffd-section-row">
-            <span class="ffd-section-label">Fleet overview &middot; {{ now()->format('M Y') }}</span>
-            @if ($isAdmin)
-                <span class="ffd-section-note">{!! $sampleTag !!} design placeholder data until Phase 7</span>
-            @endif
-        </div>
-
         @if ($isAdmin)
             @php
-                // Real values: the same model methods the old dashboard called, called once each here.
+                // Real values: the same model call the old dashboard made, called once here.
+                // vehicles.is_status is active / inactive / sold; Total Vehicles is the current fleet, sold excluded.
                 $vehicleStatus = \App\Models\Vehicle::countByStatus();
-                $paymentStatus = \App\Models\OrderDetail::vehivcle_details();
+                $realNote = 'Sample: change badge and sub-label. The %s is real.';
 
                 $kpiTiles = [
-                    ['key' => 'total_vehicles', 'label' => 'Total Vehicles', 'icon' => "\u{1F697}", 'real' => null],
-                    ['key' => 'active_vehicles', 'label' => 'Active Vehicles', 'icon' => "\u{2705}", 'real' => $vehicleStatus['active']],
-                    ['key' => 'in_maintenance', 'label' => 'In Maintenance', 'icon' => "\u{1F527}", 'real' => null],
-                    ['key' => 'total_drivers', 'label' => 'Total Drivers', 'icon' => "\u{1F464}", 'real' => $drivers->count()],
-                    ['key' => 'monthly_revenue', 'label' => 'Monthly Revenue', 'icon' => "\u{1F4B0}", 'real' => null],
-                    ['key' => 'overdue_tasks', 'label' => 'Overdue Tasks', 'icon' => "\u{26A0}\u{FE0F}", 'real' => null],
+                    ['key' => 'total_vehicles', 'label' => 'Total Vehicles', 'icon' => "\u{1F697}",
+                        'real' => $vehicleStatus['active'] + $vehicleStatus['inactive'], 'note' => sprintf($realNote, 'vehicle count (active + inactive)')],
+                    ['key' => 'active_vehicles', 'label' => 'Active Vehicles', 'icon' => "\u{2705}",
+                        'real' => $vehicleStatus['active'], 'note' => sprintf($realNote, 'active vehicle count')],
+                    ['key' => 'in_maintenance', 'label' => 'In Maintenance', 'icon' => "\u{1F527}",
+                        'real' => null, 'note' => 'Sample: every value on this card. No source yet (Phase 7).'],
+                    ['key' => 'total_drivers', 'label' => 'Total Drivers', 'icon' => "\u{1F464}",
+                        'real' => $drivers->count(), 'note' => sprintf($realNote, 'driver count')],
+                    ['key' => 'monthly_revenue', 'label' => 'Monthly Revenue', 'icon' => "\u{1F4B0}",
+                        'real' => null, 'note' => 'Sample: every value on this card. No source yet (Phase 7).'],
                 ];
             @endphp
 
-            {{-- KPI tiles --}}
+            <div class="ffd-section-row">
+                <span class="ffd-section-label">Fleet overview &middot; {{ now()->format('M Y') }}</span>
+            </div>
+
+            {{-- Row 1: five KPIs --}}
             <div class="ffd-kpis">
                 @foreach ($kpiTiles as $tile)
                     @php
                         $sample = $placeholderData['kpis'][$tile['key']];
-                        $valueIsReal = $tile['real'] !== null;
                     @endphp
-                    <div class="ffd-kpi" @unless ($valueIsReal) data-ffd-sample @endunless>
+                    <div class="ffd-kpi" data-ffd-sample>
                         <div class="ffd-kpi-top">
                             <span class="ffd-kpi-icon" aria-hidden="true">{{ $tile['icon'] }}</span>
-                            <span class="ffd-change {{ $sample['positive'] ? 'is-pos' : 'is-neg' }} {{ $valueIsReal ? 'is-sample' : '' }}"
-                                @if ($valueIsReal) data-ffd-sample title="Sample value &mdash; replaced in Phase 7" @endif>{{ $sample['change'] }}</span>
+                            <span class="ffd-kpi-marks">
+                                {!! $sampleChip($tile['note']) !!}
+                                <span class="ffd-change {{ $sample['positive'] ? 'is-pos' : 'is-neg' }}">{{ $sample['change'] }}</span>
+                            </span>
                         </div>
                         <div>
-                            <div class="ffd-kpi-value">{{ $valueIsReal ? $tile['real'] : $sample['value'] }}</div>
-                            <div class="ffd-kpi-label">
-                                <span>{{ $tile['label'] }}</span>
-                                @unless ($valueIsReal)
-                                    {!! $sampleTag !!}
-                                @endunless
-                            </div>
-                            <div class="ffd-kpi-sub">
-                                <span>{{ $sample['sub'] }}</span>
-                                @if ($valueIsReal)
-                                    {!! $sampleTag !!}
-                                @endif
-                            </div>
+                            <div class="ffd-kpi-value">{{ $tile['real'] !== null ? number_format($tile['real']) : $sample['value'] }}</div>
+                            <div class="ffd-kpi-label">{{ $tile['label'] }}</div>
+                            <div class="ffd-kpi-sub">{{ $sample['sub'] }}</div>
                         </div>
                     </div>
                 @endforeach
             </div>
 
-            {{-- Vehicle Status / Vehicle Assignment / Payment (real data) --}}
-            <div class="ffd-grid ffd-grid-3">
-                <section class="ffd-panel">
-                    <header class="ffd-panel-head">
-                        <div>
-                            <h2 class="ffd-panel-title">Vehicle Status</h2>
-                            <p class="ffd-panel-sub">Vehicles by status</p>
-                        </div>
-                    </header>
-                    <ul class="ffd-legend">
-                        <li class="ffd-legend-row">
-                            <span class="ffd-dot ffd-tone-success"></span>
-                            <span class="ffd-legend-label">Active</span>
-                            <span class="ffd-legend-value">{{ $vehicleStatus['active'] }}</span>
-                        </li>
-                        <li class="ffd-legend-row">
-                            <span class="ffd-dot ffd-tone-warning"></span>
-                            <span class="ffd-legend-label">Inactive</span>
-                            <span class="ffd-legend-value">{{ $vehicleStatus['inactive'] }}</span>
-                        </li>
-                        <li class="ffd-legend-row">
-                            <span class="ffd-dot ffd-tone-danger"></span>
-                            <span class="ffd-legend-label">Sold</span>
-                            <span class="ffd-legend-value">{{ $vehicleStatus['sold'] }}</span>
-                        </li>
-                    </ul>
-                </section>
-
-                <section class="ffd-panel">
-                    <header class="ffd-panel-head">
-                        <div>
-                            <h2 class="ffd-panel-title">Vehicle Assignment</h2>
-                            <p class="ffd-panel-sub">Rides by driver assignment</p>
-                        </div>
-                    </header>
-                    <div class="ffd-stats">
-                        <a class="ffd-stat" href="{{ route('driver_assignments.incomplete_rides') }}">
-                            <span class="ffd-stat-value ffd-text-success">{{ $incompleteOrdersWithDriver }}</span>
-                            <span class="ffd-stat-label">Assigned with driver</span>
-                        </a>
-                        <a class="ffd-stat" href="{{ route('driver_assignments.index') }}">
-                            <span class="ffd-stat-value ffd-text-danger">{{ $approvedOrders }}</span>
-                            <span class="ffd-stat-label">Unassigned</span>
-                        </a>
-                        <a class="ffd-stat" href="{{ route('driver_assignments.incomplete_rides') }}">
-                            <span class="ffd-stat-value ffd-text-success">{{ $incompleteOrderWithoutDriver }}</span>
-                            <span class="ffd-stat-label">Assigned without driver</span>
-                        </a>
-                    </div>
-                </section>
-
-                <section class="ffd-panel">
-                    <header class="ffd-panel-head">
-                        <div>
-                            <h2 class="ffd-panel-title">Payment</h2>
-                            <p class="ffd-panel-sub">Completed rides by payment</p>
-                        </div>
-                    </header>
-                    <ul class="ffd-legend">
-                        <li class="ffd-legend-row">
-                            <span class="ffd-dot ffd-tone-success"></span>
-                            <span class="ffd-legend-label">Paid</span>
-                            <span class="ffd-legend-value">{{ $paymentStatus['paid'] }}</span>
-                        </li>
-                        <li class="ffd-legend-row">
-                            <span class="ffd-dot ffd-tone-warning"></span>
-                            <span class="ffd-legend-label">Unpaid</span>
-                            <span class="ffd-legend-value">{{ $paymentStatus['unpaid'] }}</span>
-                        </li>
-                    </ul>
-                </section>
-            </div>
-
-            {{-- Fleet Mileage vs Target + Fleet Insights (sample data) --}}
+            {{-- Row 2: Fleet Mileage vs Target + Fleet Insights --}}
             <div class="ffd-grid ffd-grid-main-side">
                 <section class="ffd-panel" data-ffd-sample>
                     <header class="ffd-panel-head ffd-panel-head-chart">
@@ -280,7 +140,7 @@
                             <h2 class="ffd-panel-title">Fleet Mileage vs Target</h2>
                             <p class="ffd-panel-sub">{{ $placeholderData['mileage']['period'] }}</p>
                         </div>
-                        {!! $sampleTag !!}
+                        {!! $sampleChip('Sample: every value on this chart. No source yet (Phase 7).') !!}
                     </header>
                     <div class="ffd-chart">
                         <canvas id="ffd-chart-mileage" role="img" aria-label="Fleet mileage vs target, sample data"></canvas>
@@ -293,7 +153,7 @@
                             <h2 class="ffd-panel-title">Fleet Insights</h2>
                             <p class="ffd-panel-sub">AI-powered recommendations</p>
                         </div>
-                        {!! $sampleTag !!}
+                        {!! $sampleChip('Sample: every insight on this card. No insights engine yet (Phase 7).') !!}
                     </header>
                     <div class="ffd-insights">
                         @foreach ($placeholderData['insights'] as $insight)
@@ -315,7 +175,7 @@
                 </section>
             </div>
 
-            {{-- Maintenance Costs + Fleet Status + Next Actions (sample data) --}}
+            {{-- Row 3: Maintenance Costs + Fleet Status + Next Actions --}}
             <div class="ffd-grid ffd-grid-main-two">
                 <section class="ffd-panel" data-ffd-sample>
                     <header class="ffd-panel-head ffd-panel-head-chart">
@@ -323,20 +183,20 @@
                             <h2 class="ffd-panel-title">Maintenance Costs</h2>
                             <p class="ffd-panel-sub">{{ $placeholderData['maintenance_costs']['period'] }}</p>
                         </div>
-                        {!! $sampleTag !!}
+                        {!! $sampleChip('Sample: every value on this chart. No source yet (Phase 7).') !!}
                     </header>
                     <div class="ffd-chart">
                         <canvas id="ffd-chart-maintenance" role="img" aria-label="Maintenance costs, sample data"></canvas>
                     </div>
                 </section>
 
+                {{-- The design's "148 total vehicles" subtitle is left out on purpose: it would contradict the real Total Vehicles KPI. --}}
                 <section class="ffd-panel" data-ffd-sample>
                     <header class="ffd-panel-head">
                         <div>
                             <h2 class="ffd-panel-title">Fleet Status</h2>
-                            <p class="ffd-panel-sub">{{ array_sum(array_column($placeholderData['fleet_status'], 'value')) }} total vehicles</p>
                         </div>
-                        {!! $sampleTag !!}
+                        {!! $sampleChip("Sample: the donut's figures are design placeholders, unrelated to the KPIs above.") !!}
                     </header>
                     <div class="ffd-chart ffd-chart-donut">
                         <canvas id="ffd-chart-fleet-status" role="img" aria-label="Fleet status, sample data"></canvas>
@@ -353,18 +213,20 @@
                 </section>
 
                 <section class="ffd-panel" data-ffd-sample>
-                    <header class="ffd-panel-head ffd-panel-head-wrap">
+                    <header class="ffd-panel-head">
                         <div>
-                            <h2 class="ffd-panel-title">Next Actions {!! $sampleTag !!}</h2>
+                            <h2 class="ffd-panel-title">Next Actions</h2>
                             <p class="ffd-panel-sub">{{ count($placeholderData['next_actions']) }} pending tasks</p>
                         </div>
-                        <div class="ffd-pills" role="group" aria-label="Filter tasks by priority">
-                            <button type="button" class="ffd-pill is-active" data-ffd-filter="all" aria-pressed="true">All</button>
-                            <button type="button" class="ffd-pill" data-ffd-filter="high" aria-pressed="false">High</button>
-                            <button type="button" class="ffd-pill" data-ffd-filter="medium" aria-pressed="false">Medium</button>
-                            <button type="button" class="ffd-pill" data-ffd-filter="low" aria-pressed="false">Low</button>
-                        </div>
+                        {!! $sampleChip('Sample: every task on this card. No task source yet (Phase 7).') !!}
                     </header>
+                    {{-- The design puts the pills beside the title; in a 340px card they don't fit, so they get their own row. --}}
+                    <div class="ffd-pills ffd-pills-row" role="group" aria-label="Filter tasks by priority">
+                        <button type="button" class="ffd-pill is-active" data-ffd-filter="all" aria-pressed="true">All</button>
+                        <button type="button" class="ffd-pill" data-ffd-filter="high" aria-pressed="false">High</button>
+                        <button type="button" class="ffd-pill" data-ffd-filter="medium" aria-pressed="false">Medium</button>
+                        <button type="button" class="ffd-pill" data-ffd-filter="low" aria-pressed="false">Low</button>
+                    </div>
                     <div class="ffd-tasks-head" aria-hidden="true">
                         <span>Task</span><span>Cat.</span><span>Due</span>
                     </div>
@@ -383,239 +245,33 @@
                     </div>
                 </section>
             </div>
-
-            <div class="ffd-section-row">
-                <span class="ffd-section-label">Rides &amp; assignments</span>
-            </div>
-
-            {{-- Rides Order Status + Top Agents (real data) --}}
-            <div class="ffd-grid ffd-grid-main-side">
-                <section class="ffd-panel">
-                    <header class="ffd-panel-head ffd-panel-head-chart">
-                        <div>
-                            <h2 class="ffd-panel-title">Rides Order Status</h2>
-                            <p class="ffd-panel-sub">Rides by status</p>
-                        </div>
-                    </header>
-                    <div class="ffd-chart ffd-chart-lg">
-                        <canvas id="ffd-chart-rides" role="img" aria-label="Rides order status"></canvas>
-                    </div>
-                </section>
-
-                <section class="ffd-panel ffd-panel-flex">
-                    <header class="ffd-panel-head">
-                        <div>
-                            <h2 class="ffd-panel-title">Top Agents</h2>
-                            <p class="ffd-panel-sub">Top 5 by total sales</p>
-                        </div>
-                    </header>
-                    <ul class="ffd-list">
-                        @forelse ($topAgents as $topAgent)
-                            <li class="ffd-list-item">
-                                <span class="ffd-avatar" aria-hidden="true">{{ Str::upper(Str::substr($topAgent['agent_name'] ?? '', 0, 1)) }}</span>
-                                <span class="ffd-list-main">
-                                    <span class="ffd-list-title">{{ $topAgent['agent_name'] }}</span>
-                                    <span class="ffd-list-sub">Total sales</span>
-                                </span>
-                                <span class="ffd-list-value">{{ $topAgent['total_sales'] }}</span>
-                            </li>
-                        @empty
-                            <li class="ffd-empty">No agents to show.</li>
-                        @endforelse
-                    </ul>
-                </section>
-            </div>
-
-            {{-- Today Vehicle Assignment + Drivers (real data) --}}
-            <div class="ffd-grid ffd-grid-main-side">
-                <section class="ffd-panel">
-                    <header class="ffd-panel-head">
-                        <div>
-                            <h2 class="ffd-panel-title">Today Vehicle Assignment</h2>
-                            <p class="ffd-panel-sub">Estimated hours booked per vehicle today</p>
-                        </div>
-                    </header>
-                    <div id="ffd-chart-vehicle-bookings" class="ffd-apex"></div>
-                </section>
-
-                <section class="ffd-panel ffd-panel-flex">
-                    <header class="ffd-panel-head">
-                        <div>
-                            <h2 class="ffd-panel-title">Drivers</h2>
-                            <p class="ffd-panel-sub">Company drivers</p>
-                        </div>
-                    </header>
-                    <ul class="ffd-list">
-                        @forelse ($drivers as $driver)
-                            <li class="ffd-list-item">
-                                <span class="ffd-avatar" aria-hidden="true">{{ Str::upper(Str::substr($driver->name ?? '', 0, 1)) }}</span>
-                                <span class="ffd-list-main">
-                                    <span class="ffd-list-title">{{ $driver->name }}</span>
-                                    <span class="ffd-list-sub">{{ $driver->email }}</span>
-                                </span>
-                            </li>
-                        @empty
-                            <li class="ffd-empty">No drivers to show.</li>
-                        @endforelse
-                    </ul>
-                </section>
-            </div>
-
-            {{-- Vehicle Details (real data) --}}
-            <section class="ffd-panel ffd-block">
-                <header class="ffd-panel-head">
-                    <div>
-                        <h2 class="ffd-panel-title">Vehicle Details</h2>
-                        <p class="ffd-panel-sub">Rides scheduled for today</p>
-                    </div>
-                </header>
-                <div class="ffd-table-wrap">
-                    <table class="ffd-table">
-                        <thead>
-                            <tr>
-                                <th>No #</th>
-                                <th>Ride No</th>
-                                <th>Vehicle No</th>
-                                <th>Driver Name</th>
-                                <th>Customer Name</th>
-                                <th>Customer Whatsapp No</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @forelse ($vehicle_assignments as $vehicle_assignment)
-                                <tr>
-                                    <td class="ffd-mono">#55879</td>
-                                    <td class="ffd-strong">{{ $vehicle_assignment->id ?? null }}</td>
-                                    <td>{{ $vehicle_assignment->vehicle->vehicle_identification_number ?? null }}</td>
-                                    <td>{{ $vehicle_assignment->driver->name ?? null }}</td>
-                                    <td>{{ $vehicle_assignment->order->partner_customer->name ?? null }}</td>
-                                    <td>{{ $vehicle_assignment->order->partner_customer->whatsapp_no ?? 'unavailable' }}</td>
-                                </tr>
-                            @empty
-                                <tr>
-                                    <td colspan="6" class="ffd-empty">No vehicle assignments for today.</td>
-                                </tr>
-                            @endforelse
-                        </tbody>
-                    </table>
-                </div>
-            </section>
-
-            {{-- Upcoming Busy Rides (real data) --}}
-            <section class="ffd-panel ffd-block">
-                <header class="ffd-panel-head">
-                    <div>
-                        <h2 class="ffd-panel-title">Upcoming Busy Rides (Next 7 Days)</h2>
-                        <p class="ffd-panel-sub">Rides with a vehicle, incomplete or in progress</p>
-                    </div>
-                </header>
-                <div class="ffd-table-wrap">
-                    <table class="ffd-table">
-                        <thead>
-                            <tr>
-                                <th>No #</th>
-                                <th>Driver Name</th>
-                                <th>Vehicle No</th>
-                                <th>Date</th>
-                                <th>Status</th>
-                                <th>Route Name</th>
-                                <th>Rate</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @forelse ($orderDetailsWithVehicle as $order_details_vehicle)
-                                @php
-                                    // Same status-to-colour mapping as the old dashboard's badges.
-                                    $statusTone = match ($order_details_vehicle->status) {
-                                        'completed' => 'success',
-                                        'cancelled' => 'danger',
-                                        'unapproved' => 'warning',
-                                        default => 'brand',
-                                    };
-                                @endphp
-                                <tr>
-                                    <td class="ffd-mono">#55879</td>
-                                    <td class="ffd-strong">{{ $order_details_vehicle->driver->name ?? null }}</td>
-                                    <td>{{ $order_details_vehicle->vehicle->vehicle_identification_number ?? null }}</td>
-                                    <td class="ffd-mono">{{ $order_details_vehicle->date ?? null }}</td>
-                                    <td><span class="ffd-status ffd-status-{{ $statusTone }}">{{ Str::title($order_details_vehicle->status ?? '') }}</span></td>
-                                    <td>{{ $order_details_vehicle->rate_list->name ?? null }}</td>
-                                    <td class="ffd-mono">{{ $order_details_vehicle->rate ?? null }}</td>
-                                </tr>
-                            @empty
-                                <tr>
-                                    <td colspan="7" class="ffd-empty">No busy rides in the next 7 days.</td>
-                                </tr>
-                            @endforelse
-                        </tbody>
-                    </table>
-                </div>
-            </section>
         @else
-            {{-- Agents and other roles: the same content as the old dashboard, restyled. No sample components. --}}
-            <div class="ffd-grid ffd-grid-main-side">
-                <section class="ffd-panel">
-                    <header class="ffd-panel-head ffd-panel-head-chart">
-                        <div>
-                            <h2 class="ffd-panel-title">Rides Order Status</h2>
-                            <p class="ffd-panel-sub">Rides by status</p>
-                        </div>
-                    </header>
-                    <div class="ffd-chart ffd-chart-lg">
-                        <canvas id="ffd-chart-rides" role="img" aria-label="Rides order status"></canvas>
-                    </div>
-                </section>
-
-                <section class="ffd-panel ffd-panel-flex">
-                    <header class="ffd-panel-head">
-                        <div>
-                            <h2 class="ffd-panel-title">Customers</h2>
-                            <p class="ffd-panel-sub">Your customers</p>
-                        </div>
-                    </header>
-                    <ul class="ffd-list">
-                        @forelse ($agentallcustomer as $customer)
-                            <li class="ffd-list-item">
-                                <span class="ffd-avatar" aria-hidden="true">{{ Str::upper(Str::substr($customer->name ?? '', 0, 1)) }}</span>
-                                <span class="ffd-list-main">
-                                    <span class="ffd-list-title">{{ $customer->name }}</span>
-                                    <span class="ffd-list-sub">{{ $customer->email }}</span>
-                                </span>
-                            </li>
-                        @empty
-                            <li class="ffd-empty">No customers to show.</li>
-                        @endforelse
-                    </ul>
-                </section>
-            </div>
+            {{-- The design is an admin fleet view with no agent version; agents keep their real dashboard on /. --}}
+            <section class="ffd-panel ffd-redirect">
+                <h2 class="ffd-panel-title">Your dashboard is on the home page</h2>
+                <p class="ffd-redirect-text">This page shows fleet-wide figures for administrators. Your rides and customers are on your own dashboard.</p>
+                <a class="ffd-btn ffd-btn-primary" href="{{ url('/') }}">Open my dashboard</a>
+            </section>
         @endif
     </div>
 
-    @php
-        // Chart data for main-dashboard.js. "real" is wired exactly as the old dashboard;
-        // "sample" comes only from $placeholderData.
-        $ffdData = [
-            'real' => [
-                'rides' => $isAdmin
-                    ? [$totalOrders, $pendingOrders, $incompleteOrders, $completedOrders, $approvedOrders, $unapprovedOrders, $cancelOrders]
-                    : [$agenttotalOrders, $agentpendingOrders, $agentincompleteOrders, $agentcompletedOrders, $agentapprovedOrders, $agentunapprovedOrders, $agentcancelOrders],
-                'vehicleBookings' => $isAdmin ? $vehicleBookings : [],
-            ],
-            'sample' => $isAdmin
-                ? [
+    @if ($isAdmin)
+        @php
+            // Chart data for main-dashboard.js: sample values from $placeholderData only.
+            $ffdData = [
+                'sample' => [
                     'mileage' => $placeholderData['mileage'],
                     'maintenanceCosts' => $placeholderData['maintenance_costs'],
                     'fleetStatus' => $placeholderData['fleet_status'],
-                ]
-                : null,
-        ];
-    @endphp
-    <script type="application/json" id="ffd-data">@json($ffdData)</script>
+                ],
+            ];
+        @endphp
+        <script type="application/json" id="ffd-data">@json($ffdData)</script>
+    @endif
 @endsection
 
 @section('script')
     @if ($isAdmin)
-        <script src="{{ asset('assets/plugins/apexcharts-bundle/js/apexcharts.min.js') }}"></script>
+        <script src="{{ asset('assets/js/main-dashboard.js') }}?v={{ filemtime(public_path('assets/js/main-dashboard.js')) }}"></script>
     @endif
-    <script src="{{ asset('assets/js/main-dashboard.js') }}"></script>
 @endsection

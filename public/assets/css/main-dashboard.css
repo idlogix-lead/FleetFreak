@@ -41,8 +41,6 @@
     --ffd-pos-bg: #ecfdf5;
     --ffd-neg: #e53e3e;
     --ffd-neg-bg: #fff5f5;
-    --ffd-warn: #b7791f;
-    --ffd-warn-bg: #fffbeb;
 
     --ffd-prio-high: #e53e3e;
     --ffd-prio-medium: #f6ad55;
@@ -86,7 +84,6 @@ html.dark-theme .ffd {
 
     --ffd-pos-bg: rgba(5, 150, 105, 0.16);
     --ffd-neg-bg: rgba(229, 62, 62, 0.16);
-    --ffd-warn-bg: rgba(183, 121, 31, 0.20);
 
     --ffd-sample-border: rgba(255, 255, 255, 0.22);
 
@@ -97,6 +94,8 @@ html.dark-theme .ffd {
 /* -------------------------------------------------------------------- base */
 
 .ffd {
+    /* Breakpoints below follow this element's width, not the window's (see "breakpoints"). */
+    container: ffd / inline-size;
     padding: 28px 28px 56px;
     min-height: calc(100vh - 60px);
     background: var(--ffd-bg);
@@ -122,58 +121,12 @@ html.dark-theme .ffd {
 
 /*
  * bootstrap-extended.css forces every h1-h6 to #640D5F !important (all pages).
- * The dashboard's titles use the design's text colour, so these three win back
+ * The dashboard's titles use the design's text colour, so these two win back
  * with a scoped !important. Nothing outside .ffd is affected.
  */
 .ffd .ffd-panel-title,
-.ffd .ffd-insight-title,
-.ffd .ffd-offcanvas-title {
+.ffd .ffd-insight-title {
     color: var(--ffd-text) !important;
-}
-
-.ffd-mono {
-    font-family: var(--ffd-font-mono);
-}
-
-.ffd-strong {
-    font-weight: 600;
-}
-
-/* ------------------------------------------------------------- page header */
-
-/* The page title, date and Refresh live in the app shell's top bar (app-shell.css). */
-.ffd-page-head {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: flex-end;
-    gap: 16px;
-    margin-bottom: 26px;
-}
-
-.ffd-page-actions {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 10px;
-}
-
-.ffd-chip {
-    display: inline-flex;
-    align-items: center;
-    padding: 7px 12px;
-    border-radius: var(--ffd-radius-md);
-    background: var(--ffd-brand-pale);
-    color: var(--ffd-brand-text);
-    font-size: 12px;
-    font-weight: 600;
-    white-space: nowrap;
-}
-
-.ffd-chip-muted {
-    font-family: var(--ffd-font-mono);
-    font-weight: 500;
-    color: var(--ffd-text-body);
 }
 
 /* ----------------------------------------------------------------- buttons */
@@ -196,8 +149,7 @@ html.dark-theme .ffd {
 }
 
 .ffd-btn:focus-visible,
-.ffd-pill:focus-visible,
-.ffd-stat:focus-visible {
+.ffd-pill:focus-visible {
     outline: 2px solid var(--ffd-brand-hover);
     outline-offset: 2px;
 }
@@ -209,6 +161,12 @@ html.dark-theme .ffd {
 
 .ffd-btn-primary:hover {
     background: var(--ffd-brand-hover);
+    color: #ffffff;
+}
+
+/* A primary button that is a link: outranks ".ffd a { color: inherit }". */
+.ffd a.ffd-btn-primary,
+.ffd a.ffd-btn-primary:hover {
     color: #ffffff;
 }
 
@@ -248,6 +206,7 @@ html.dark-theme .ffd {
 
 /* ------------------------------------------------------------- sample tag */
 
+/* One per card, at the right end of the card's top row; the tooltip says what is sample. */
 .ffd-sample {
     display: inline-flex;
     align-items: center;
@@ -287,19 +246,12 @@ html.dark-theme .ffd {
     color: var(--ffd-muted);
 }
 
-.ffd-section-note {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 11px;
-    color: var(--ffd-faint);
-}
-
 /* ------------------------------------------------------------------- grids */
 
+/* The design's three rows: 5 KPIs, then 1fr + 340px, then 1fr + 300px + 340px. */
 .ffd-kpis {
     display: grid;
-    grid-template-columns: repeat(6, minmax(0, 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr));
     gap: 14px;
     margin-bottom: 22px;
 }
@@ -310,20 +262,15 @@ html.dark-theme .ffd {
     margin-bottom: 22px;
 }
 
-.ffd-grid-3 {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
 .ffd-grid-main-side {
     grid-template-columns: minmax(0, 1fr) 340px;
 }
 
+/* The design's 1fr 300px 340px. The two side cards may give up a little width
+   (to 250px and 310px) before the row breaks, so it holds down to a 872px dashboard. */
 .ffd-grid-main-two {
-    grid-template-columns: minmax(0, 1fr) 300px 340px;
-}
-
-.ffd-block {
-    margin-bottom: 22px;
+    grid-template-columns: minmax(280px, 1fr) minmax(250px, 300px) minmax(310px, 340px);
+    margin-bottom: 0;
 }
 
 /* --------------------------------------------------------------- KPI tiles */
@@ -365,6 +312,14 @@ html.dark-theme .ffd {
     line-height: 1;
 }
 
+/* SAMPLE chip and change badge, together at the top right. */
+.ffd-kpi-marks {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+}
+
 .ffd-change {
     padding: 3px 8px;
     border-radius: var(--ffd-radius-pill);
@@ -385,13 +340,6 @@ html.dark-theme .ffd {
     color: var(--ffd-neg);
 }
 
-/* A sample badge on a tile whose value is real. */
-.ffd-change.is-sample {
-    padding: 2px 7px;
-    border: 1px dashed currentColor;
-    cursor: help;
-}
-
 .ffd-kpi-value {
     font-family: var(--ffd-font-display);
     font-weight: 700;
@@ -403,10 +351,6 @@ html.dark-theme .ffd {
 }
 
 .ffd-kpi-label {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 6px;
     margin-top: 2px;
     font-size: 13px;
     font-weight: 500;
@@ -414,10 +358,6 @@ html.dark-theme .ffd {
 }
 
 .ffd-kpi-sub {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 6px;
     margin-top: 2px;
     font-size: 11px;
     color: var(--ffd-muted);
@@ -450,15 +390,7 @@ html.dark-theme .ffd {
     margin-bottom: 20px;
 }
 
-.ffd-panel-head-wrap {
-    flex-wrap: wrap;
-}
-
 .ffd .ffd-panel-title {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 8px;
     font-family: var(--ffd-font-display);
     font-weight: 700;
     font-size: 15px;
@@ -550,54 +482,9 @@ html.dark-theme .ffd {
     font-size: 12px;
 }
 
-.ffd-tone-success { background: var(--ffd-pos); }
-.ffd-tone-warning { background: var(--ffd-amber); }
-.ffd-tone-danger { background: var(--ffd-neg); }
 .ffd-tone-brand { background: var(--ffd-brand); }
 .ffd-tone-lilac { background: var(--ffd-lilac); }
 .ffd-tone-amber { background: var(--ffd-amber); }
-
-.ffd .ffd-text-success { color: var(--ffd-pos); }
-.ffd .ffd-text-danger { color: var(--ffd-neg); }
-
-/* ------------------------------------------------ vehicle assignment stats */
-
-.ffd-stats {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
-    gap: 10px;
-}
-
-.ffd .ffd-stat {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    min-width: 0;
-    padding: 14px 12px;
-    background: var(--ffd-subtle);
-    border: 1px solid var(--ffd-grid);
-    border-radius: var(--ffd-radius-md);
-    transition: border-color 0.15s, box-shadow 0.15s;
-}
-
-.ffd .ffd-stat:hover {
-    border-color: var(--ffd-border-hover);
-    box-shadow: var(--ffd-shadow-item);
-}
-
-.ffd-stat-value {
-    font-family: var(--ffd-font-display);
-    font-weight: 700;
-    font-size: 26px;
-    line-height: 1.1;
-    letter-spacing: -0.5px;
-}
-
-.ffd-stat-label {
-    font-size: 12px;
-    line-height: 1.35;
-    color: var(--ffd-text-body);
-}
 
 /* ------------------------------------------------------------------ charts */
 
@@ -606,16 +493,8 @@ html.dark-theme .ffd {
     height: 220px;
 }
 
-.ffd-chart-lg {
-    height: 300px;
-}
-
 .ffd-chart-donut {
     height: 160px;
-}
-
-.ffd-apex {
-    min-height: 300px;
 }
 
 /* ---------------------------------------------------------------- insights */
@@ -693,6 +572,10 @@ html.dark-theme .ffd {
     display: flex;
     flex-wrap: wrap;
     gap: 5px;
+}
+
+.ffd-pills-row {
+    margin: -4px 0 12px;
 }
 
 .ffd-pill {
@@ -792,226 +675,45 @@ html.dark-theme .ffd {
     color: var(--ffd-neg);
 }
 
-/* ------------------------------------------------ agents / drivers lists */
+/* ----------------------------------------------------- agent link card */
+/* The design has no agent version (docs: Known limitations); agents get a pointer to /. */
 
-.ffd-list {
+.ffd-redirect {
     display: flex;
     flex-direction: column;
-    gap: 8px;
-    max-height: 320px;
-    margin: 0;
-    padding: 0 2px 0 0;
-    overflow-y: auto;
-    list-style: none;
-    scrollbar-width: thin;
-    scrollbar-color: var(--ffd-sample-border) transparent;
-}
-
-.ffd-list::-webkit-scrollbar {
-    width: 4px;
-}
-
-.ffd-list::-webkit-scrollbar-thumb {
-    background: var(--ffd-sample-border);
-    border-radius: var(--ffd-radius-pill);
-}
-
-.ffd-list-item {
-    display: flex;
-    align-items: center;
+    align-items: flex-start;
     gap: 10px;
-    min-width: 0;
-    padding: 10px 12px;
-    background: var(--ffd-subtle);
-    border: 1px solid var(--ffd-grid);
-    border-radius: var(--ffd-radius-md);
+    max-width: 560px;
 }
 
-.ffd-avatar {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-    width: 30px;
-    height: 30px;
-    border-radius: var(--ffd-radius-pill);
-    background: var(--ffd-brand);
-    color: #ffffff;
-    font-family: var(--ffd-font-display);
+.ffd-redirect-text {
     font-size: 13px;
-    font-weight: 700;
-}
-
-.ffd-list-main {
-    display: flex;
-    flex: 1;
-    flex-direction: column;
-    min-width: 0;
-}
-
-.ffd-list-title,
-.ffd-list-sub {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.ffd-list-title {
-    font-family: var(--ffd-font-display);
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--ffd-text);
-}
-
-.ffd-list-sub {
-    font-size: 11.5px;
-    color: var(--ffd-muted);
-}
-
-.ffd-list-value {
-    font-family: var(--ffd-font-mono);
-    font-size: 12px;
-    font-weight: 500;
-    color: var(--ffd-text);
-    white-space: nowrap;
-}
-
-.ffd-empty {
-    padding: 14px 0;
-    font-size: 12px;
-    color: var(--ffd-muted);
-    text-align: center;
-}
-
-/* ------------------------------------------------------------------ tables */
-
-.ffd-table-wrap {
-    overflow-x: auto;
-}
-
-.ffd-table {
-    width: 100%;
-    border-collapse: separate;
-    border-spacing: 0;
-    font-size: 12px;
-    color: var(--ffd-text);
-}
-
-.ffd-table th {
-    padding: 8px 12px;
-    background: var(--ffd-brand-pale);
-    font-family: var(--ffd-font-mono);
-    font-size: 10px;
-    font-weight: 500;
-    letter-spacing: 0.06em;
-    text-align: left;
-    text-transform: uppercase;
-    color: var(--ffd-muted);
-    white-space: nowrap;
-}
-
-.ffd-table th:first-child {
-    border-radius: 7px 0 0 7px;
-}
-
-.ffd-table th:last-child {
-    border-radius: 0 7px 7px 0;
-}
-
-.ffd-table td {
-    padding: 11px 12px;
-    border-bottom: 1px solid var(--ffd-grid);
-    white-space: nowrap;
-}
-
-.ffd-table tbody tr:last-child td {
-    border-bottom: 0;
-}
-
-.ffd-table tbody tr:hover td {
-    background: var(--ffd-subtle);
-}
-
-.ffd-status {
-    display: inline-block;
-    padding: 2px 8px;
-    border-radius: var(--ffd-radius-pill);
-    font-size: 11px;
-    font-weight: 500;
-}
-
-.ffd-status-success { background: var(--ffd-pos-bg); color: var(--ffd-pos); }
-.ffd-status-danger { background: var(--ffd-neg-bg); color: var(--ffd-neg); }
-.ffd-status-warning { background: var(--ffd-warn-bg); color: var(--ffd-warn); }
-.ffd-status-brand { background: var(--ffd-brand-pale); color: var(--ffd-brand-text); }
-
-/* ----------------------------------------------------------- filter panel */
-
-.ffd .ffd-offcanvas {
-    background: var(--ffd-surface);
-    color: var(--ffd-text);
-    border-left: 1px solid var(--ffd-border);
-}
-
-.ffd .ffd-offcanvas-title {
-    font-family: var(--ffd-font-display);
-    font-size: 16px;
-    font-weight: 700;
-    color: var(--ffd-text);
-}
-
-html.dark-theme .ffd .ffd-offcanvas .btn-close {
-    filter: invert(1) grayscale(100%) brightness(200%);
-}
-
-.ffd-filter-form {
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-}
-
-.ffd .ffd-field label {
-    display: block;
-    margin-bottom: 6px;
-    font-family: var(--ffd-font-body);
-    font-size: 12px;
-    font-weight: 600;
-    color: var(--ffd-text-2);
-}
-
-.ffd .ffd-input {
-    padding: 8px 12px;
-    border: 1px solid var(--ffd-border);
-    border-radius: var(--ffd-radius-sm);
-    background-color: var(--ffd-surface);
-    color: var(--ffd-text);
-    font-family: var(--ffd-font-body);
-    font-size: 13px;
-}
-
-.ffd .ffd-input:focus {
-    border-color: var(--ffd-brand-hover);
-    box-shadow: 0 0 0 3px var(--ffd-brand-pale);
-}
-
-.ffd-filter-actions {
-    display: flex;
-    gap: 10px;
-    padding-top: 4px;
-}
-
-.ffd-filter-actions .ffd-btn {
-    flex: 1;
+    color: var(--ffd-text-body);
 }
 
 /* ------------------------------------------------------------- breakpoints */
-/* The design defines none; these keep its column structure where it fits. */
+/*
+ * The design defines none; these keep its column structure wherever it fits.
+ * They are container queries on .ffd (its content width), not window media
+ * queries: browser zoom, display scaling and the sidebar (open, collapsed or a
+ * drawer) all change the room the dashboard has. With the sidebar open, the
+ * dashboard is about 300px narrower than the window, so a 1280px window still
+ * gets the design's three rows.
+ */
 
-@media (max-width: 1399.98px) {
+@container ffd (max-width: 1099.98px) {
+    .ffd-kpi {
+        padding: 18px 16px;
+    }
+}
+
+@container ffd (max-width: 919.98px) {
     .ffd-kpis {
         grid-template-columns: repeat(3, minmax(0, 1fr));
     }
+}
 
+@container ffd (max-width: 871.98px) {
     .ffd-grid-main-two {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
@@ -1021,22 +723,17 @@ html.dark-theme .ffd .ffd-offcanvas .btn-close {
     }
 }
 
-@media (max-width: 1199.98px) {
+@container ffd (max-width: 759.98px) {
     .ffd-grid-main-side {
         grid-template-columns: minmax(0, 1fr);
     }
 }
 
-@media (max-width: 767.98px) {
-    .ffd {
-        padding: 20px 16px 56px;
-    }
-
+@container ffd (max-width: 599.98px) {
     .ffd-kpis {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
-    .ffd-grid-3,
     .ffd-grid-main-two {
         grid-template-columns: minmax(0, 1fr);
     }
@@ -1054,9 +751,16 @@ html.dark-theme .ffd .ffd-offcanvas .btn-close {
     }
 }
 
-@media (max-width: 479.98px) {
+@container ffd (max-width: 379.98px) {
     .ffd-kpis {
         grid-template-columns: minmax(0, 1fr);
+    }
+}
+
+/* The container can't restyle itself, so its own padding still follows the window. */
+@media (max-width: 767.98px) {
+    .ffd {
+        padding: 20px 16px 56px;
     }
 }
 
