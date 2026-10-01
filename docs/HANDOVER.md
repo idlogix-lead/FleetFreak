@@ -1,8 +1,11 @@
-# FleetFreak Re-Architecture — Session Handover (2026-09-24, updated 2026-09-29)
+# FleetFreak Re-Architecture — Session Handover (2026-09-24, updated 2026-10-01)
 
-> **Start here (2026-09-29):** the Figma UI redesign track is mid-flight. Commit 1
-> (`97846e2`) is done, and commit 2 (app shell) is committed as **WIP**.
-> **Tomorrow's first task is the UI fix list in §7.5.**
+> **Start here (2026-10-01):** the Figma UI redesign track is mid-flight.
+> - `97846e2` added the new `/dashboard` page.
+> - The app shell is committed as WIP.
+> - On 2026-10-01, `/dashboard` was cut down to exactly the design, and the header was simplified (§7.7).
+>
+> **Next task: the remaining UI fix list in §7.5.**
 
 Written so a fresh Claude session (or any developer) can continue with zero
 conversational memory. Read top to bottom before touching anything.
@@ -76,16 +79,17 @@ is in require-dev).
 
 ## 2. Current state
 
-_Refreshed 2026-09-24 (end of the Phase 1 follow-up session). Redesign status added 2026-09-29._
+_Refreshed 2026-09-24 (end of the Phase 1 follow-up session). Redesign status added 2026-09-29, updated 2026-10-01._
 
-- **2026-09-29:**
-  - `97846e2` (the new `/dashboard` page) and the WIP commit
-    "WIP: app shell redesign — UI fixes pending" sit on top of the history below. Details in §7.
-  - The working tree still holds the user's own uncommitted edits, deliberately left out of both commits:
-    - editor reformatting of `DashboardController.php` and `routes/web.php`;
-    - `public/assets/css/app.css`;
-    - `DashboardController copy 2.php`;
-    - an untracked `.mcp.json` (local MCP config; never commit it).
+- **2026-09-29:** `97846e2` (the new `/dashboard` page) and `1fbf3f4` ("WIP: app shell redesign — UI fixes
+  pending"). Details in §7.
+- **2026-09-30:** the working tree was cleaned up.
+  - `6fd9e46` is the editor's formatter output for `DashboardController.php`, `routes/web.php` and `app.css`.
+    Token-verified: no logic changes.
+  - `5688324`: `.mcp.json` is now gitignored (local MCP config; never commit it); the stale
+    `DashboardController copy 2.php` is deleted; and the format-on-save note is in §5.
+- **2026-10-01:** "Dashboard and app shell: Figma design-only content, header simplified" (§7.7). The working tree is
+  clean after it.
 - Branch: `moeen`. Commit history before 2026-09-29:
   `ff32402` first commit, `c734f18` bootstrap+docs, `721f238` Phase 0,
   `6e1ab1f` housekeeping, `daf4ac3` Phase 1, `0293bc5` handover,
@@ -452,8 +456,8 @@ Behavior changes shipped in Phase 1 (communicate to the client/users):
 
 ## 6. Next steps for a fresh session
 
-0. **First (2026-09-30): work the UI fix list in §7.5.** Re-verify as described in §7.6, report, and commit
-   only when the user says so.
+0. **First: work the remaining UI fix list in §7.5.** §7.7 covers what changed on 2026-10-01. Re-verify as
+   described in §7.6, report, and commit only when the user says so.
 1. Read `docs/TECHNICAL_KNOWLEDGE_BASE.md`, then this document.
 2. On any existing database, make sure migration
    `2026_09_24_000001_register_rbac_web_actions` has been applied
@@ -530,6 +534,14 @@ the new shell around its old body. There are 8 files:
 | `resources/views/home_dashboard/main.blade.php` | Removed the in-page title, date and Refresh, which are now in the top bar. The chips and Filter stay. |
 | `public/assets/css/main-dashboard.css` | Removed the dead `.ffd-page-title` / `.ffd-page-date` rules; the page head is right-aligned. |
 | `public/assets/js/main-dashboard.js` | Removed the dead Refresh handler. |
+
+**Superseded in part on 2026-10-01 (§7.7):**
+- In `header.blade.php`, these are now commented out:
+  - the Unapproved Agents tile and its count query;
+  - Vehicle Locations;
+  - Create Ride;
+  - the search SAMPLE chip.
+- `main.blade.php` no longer has the chips or the Filter: the page now holds only the design's components.
 | `docs/design-tokens-dashboard.md` | New "App shell" section (files, behaviour, tokens, type, breakpoints); Phase 7 item 12 covers the search. |
 
 Decisions the user made for commit 2:
@@ -600,16 +612,16 @@ Temp storage can be cleared, so see §7.6 to rebuild it.
    rendered for everyone and ran the agent notification queries.
 7. **simplebar removed** from the sidebar, so Collapse can stay pinned outside the scroll area.
 
-### 7.5 Open UI fix list — tomorrow's first task
+### 7.5 Open UI fix list — next session's first task
 
 1. **User-reported UI issues: TO ADD.** The user reported open UI issues at the end of the 2026-09-29 session, but
    they never reached that Claude session: no message, no comments on the review page. Get them from the user first
    and number them here, ahead of the items below.
 2. **Two Refresh buttons on `/`.** The frozen old body has its own Refresh next to the header's. Options: hide the
    header Refresh on route path `/` only, or leave it until `/` switches to the new dashboard.
-3. **Title truncates on phones.** At 375px an admin on a dashboard has Refresh, four tiles and the avatar, so the
-   title shrinks to "Main …". Options: move Vehicle Locations and Create Ride into the user menu below 576px, or
-   drop the title below 400px.
+3. **Title truncates on phones: re-check.** At 375px an admin on a dashboard had Refresh, four tiles and the avatar,
+   so the title shrank to "Main …". Since 2026-10-01 three of those tiles are commented out (§7.7), leaving Refresh,
+   the bell and the avatar. Take a 375px screenshot before deciding whether anything else is needed.
 4. **Pages without breadcrumbs show "FleetFreak"** as the title (calendar, user profile and others). Options: add a
    route-name → title map to the header, or add `@section('title')` to those views.
 5. **Hover state not captured in screenshots.** Check the menu hover pill (`#faf5fa`), the icon-tile hover and the
@@ -620,6 +632,8 @@ Temp storage can be cleared, so see §7.6 to rebuild it.
 8. **Vehicles table clips its Actions column at 1024px.** That's the existing page body, not the shell. Confirm
    whether it's in scope.
 9. **Decision still open:** should the menu's "Main Dashboard" link move from `/` to `/dashboard`?
+10. **Backlog: trim `DashboardController@indexNew`** once Phase 7 settles what `/dashboard` shows. It still computes
+    all the old dashboard data, which is now partly unused (§7.7).
 
 Data issue noticed, not UI and not fixed:
 - `Notification::admin_all_notifications()` is `self::get()`, which is unscoped. The admin's "All" tab lists
@@ -642,3 +656,91 @@ Data issue noticed, not UI and not fixed:
      boxicons font fails to load and the icons show as squares.
    - Take the shots with `shoot.ps1` (headless Edge; below 500px wide it uses an iframe wrapper).
 6. **Run the tests:** `SmokeLoginTest`, `AgentDashboardTest`, the render test and the role-gate test.
+   - The render test (`RenderMainDashboardTest.php`) was rewritten on 2026-10-01 for the design-only page.
+   - The role-gate test (`ShellBehaviourTest.php`) still expects the header tiles that are now commented out
+     (`#notificationCount`, Vehicle Locations, Create Ride). Update it before reusing it.
+
+### 7.7 2026-10-01: design-only `/dashboard` and a simpler header
+
+The client wants `/dashboard` to match the Figma design exactly, not a blend. Everything below is in the commit
+"Dashboard and app shell: Figma design-only content, header simplified". `/` is untouched: `dashboard.blade.php`,
+`DashboardController@index` and `routes/web.php` have no changes.
+
+**What `/dashboard` contains now (admins).** Only what the design renders, in its order and proportions:
+- the section label;
+- **Row 1:** five KPI tiles;
+- **Row 2:** Fleet Mileage vs Target (`1fr`) and Fleet Insights (340px);
+- **Row 3:** Maintenance Costs (`1fr`), Fleet Status (300px) and Next Actions (340px).
+
+The design defines six KPIs but renders only five, so "Overdue Tasks" is gone.
+
+**KPIs.**
+- Real values:
+  - **Total Vehicles** is `Vehicle::countByStatus()` active + inactive, with sold vehicles excluded.
+  - **Active Vehicles** is `countByStatus()['active']`.
+  - **Total Drivers** is `$drivers->count()`.
+- Sample values:
+  - **In Maintenance:** there is no real source, because vehicles have no maintenance status. The vehicle
+    dashboard's figure counts completed maintenance invoices in a date range, which is a different metric.
+  - **Monthly Revenue.**
+- All five change badges and sub-labels are still samples.
+
+**Removed.** The nine existing components that aren't in the design:
+- Vehicle Status, Vehicle Assignment, Payment;
+- Rides Order Status, Today Vehicle Assignment, Top Agents;
+- Drivers, Vehicle Details, Upcoming Busy Rides.
+
+Also removed: the filter row (chips, Filter button and panel), the Overdue Tasks KPI, and the agents' Rides chart
+and Customers list. Every one of them still exists on `/`. `docs/design-tokens-dashboard.md` → "Removed from
+/dashboard" lists each with its data and its location in `dashboard.blade.php`. That list was written before
+anything was deleted.
+
+**SAMPLE marking: one chip per card,** instead of one per element.
+- Each card holding any sample value has exactly one chip, at the right end of its top row; there are 10 today.
+- The chip's tooltip says what is sample.
+- Gone: the dashed outline on KPI badges, the second tag beside sub-labels, and the page-level note.
+
+**Deliberate deviations from the design.**
+- **Fleet Status has no "148 total vehicles" subtitle.** Next to the real Total Vehicles KPI, a second total would
+  look like a bug. Its chip says the donut's figures are placeholders unrelated to the KPIs above.
+- **Next Actions' priority pills sit on their own row.** They don't fit beside the title in a 340px card.
+
+**Agent view.**
+- Agents and other non-admin roles see one card, "Open my dashboard", linking to `/`. They see no fleet numbers and
+  no charts.
+- This is recorded as a known limitation: `/dashboard` is an admin fleet view, and an agent version needs designing
+  first.
+
+**Layout fix after the user's 1440px report.**
+- **The bug:** row 3 broke into "chart on top, two below" whenever the window was under 1400px, which happens with
+  zoom, display scaling or DevTools open.
+- **Breakpoints:** they are now container queries on the dashboard's own width, and the side cards may narrow (to
+  250px and 310px) before the row breaks. A 1440, 1366 or 1280 window (sidebar open) and a 1024 window (sidebar as
+  a drawer) all show the design layout.
+- **Version stamps:** the view links the CSS and JS with `?v=<file modified time>` so browsers can't keep stale copies.
+
+**Header simplified** (`layouts/header.blade.php`, on request). Commented out with Blade comments, so nothing
+reaches the HTML:
+- the admin tiles Unapproved Agents and Vehicle Locations, and the agents-badge count query
+  (`Partner::unapprovedAgentsCount()`, inside the same comment block, so it no longer runs on every admin page);
+- the Create Ride tile;
+- the SAMPLE chip beside the search box.
+
+Unapproved Agents, Vehicle Locations and Create Ride stay reachable from the sidebar menu. Uncommenting each block
+restores it; the tile block brings its count query back with it.
+
+**Backlog.** `DashboardController@indexNew` still computes all the old dashboard data, which is now partly unused.
+It's kept on purpose: some components may come back, and restoring one is markup-only.
+
+**Verification.**
+- **Scratch render test:** passes (78 assertions). It checks:
+  - the card order;
+  - the five KPI values;
+  - one chip per card;
+  - no donut subtitle;
+  - the removed components, the filter, ApexCharts and the "real" chart data are absent;
+  - the agent card;
+  - `viewData` parity with `/`.
+- **Repo tests:** `SmokeLoginTest` and `AgentDashboardTest` pass.
+- **Screenshots:** 1440, 1366, 1280, 1152, 1024, 768 and 375px, light and dark, plus the agent view.
+  Review page: https://claude.ai/artifact/Vkc2hKBX8P1AA1VDpmX8aF

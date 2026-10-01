@@ -1,9 +1,9 @@
 /*
  * Main dashboard (/dashboard) - resources/views/home_dashboard/main.blade.php
  *
- * Draws the charts and wires the small interactions. Chart data comes from the
- * JSON block #ffd-data: "real" is the controller data as before, "sample" is
- * $placeholderData. Chart.js is loaded by the layout; ApexCharts by the view.
+ * Draws the design's three charts and wires the Next Actions filter. Chart data
+ * comes from the JSON block #ffd-data ("sample", i.e. $placeholderData).
+ * Chart.js is loaded by the layout.
  */
 (function () {
     'use strict';
@@ -12,9 +12,6 @@
     if (!root) {
         return;
     }
-
-    var RIDE_LABELS = ['Total Rides', 'Pending Rides', 'Incomplete Rides', 'Completed Rides', 'Approved Rides', 'Unapproved Rides', 'Cancelled Rides'];
-    var RIDE_COLORS = ['#4CAF50', '#FF9800', '#F44336', '#2196F3', '#9C27B0', '#FFC107', '#795548'];
 
     function readData() {
         var el = document.getElementById('ffd-data');
@@ -43,8 +40,7 @@
             text2: v('--ffd-text-2'),
             muted: v('--ffd-muted'),
             fontBody: v('--ffd-font-body'),
-            fontMono: v('--ffd-font-mono'),
-            dark: document.documentElement.classList.contains('dark-theme')
+            fontMono: v('--ffd-font-mono')
         };
     }
 
@@ -257,131 +253,15 @@
         });
     }
 
-    /* ------------------------------------------------------------ real charts */
-
-    // Same labels, values and status colours as the old dashboard's chart.
-    function drawRides(t, values) {
-        var el = canvas('ffd-chart-rides');
-        if (!el || !values) {
-            return;
-        }
-        new Chart(el, {
-            type: 'line',
-            data: {
-                labels: RIDE_LABELS,
-                datasets: [{
-                    label: 'Ride Orders',
-                    data: values,
-                    borderColor: t.brand,
-                    borderWidth: 2,
-                    backgroundColor: areaGradient(t.brand, 0.12),
-                    fill: 'origin',
-                    cubicInterpolationMode: 'monotone',
-                    pointBackgroundColor: RIDE_COLORS,
-                    pointBorderColor: t.surface,
-                    pointBorderWidth: 2,
-                    pointRadius: 5,
-                    pointHoverRadius: 7
-                }]
-            },
-            options: baseOptions(t, {
-                scales: {
-                    x: axis(t, {
-                        ticks: {
-                            color: t.muted,
-                            padding: 8,
-                            autoSkip: false,
-                            maxRotation: 0,
-                            font: { family: t.fontMono, size: 11 },
-                            // "Pending Rides" -> two lines, so seven labels fit without rotating.
-                            callback: function (value) { return RIDE_LABELS[value].split(' '); }
-                        }
-                    }),
-                    y: axis(t, {
-                        beginAtZero: true,
-                        ticks: { color: t.muted, padding: 8, precision: 0, font: { family: t.fontMono, size: 11 } }
-                    })
-                },
-                plugins: {
-                    legend: legend(t, function () {
-                        return RIDE_LABELS.map(function (label, i) {
-                            return {
-                                text: label,
-                                fillStyle: RIDE_COLORS[i],
-                                strokeStyle: RIDE_COLORS[i],
-                                fontColor: t.text2,
-                                lineWidth: 0,
-                                pointStyle: 'circle'
-                            };
-                        });
-                    }),
-                    tooltip: tooltip(t)
-                }
-            })
-        });
-    }
-
-    // Same series, categories and y axis as the old ApexCharts chart; restyled only.
-    function drawVehicleBookings(t, bookings) {
-        var el = document.getElementById('ffd-chart-vehicle-bookings');
-        if (!el || typeof ApexCharts === 'undefined') {
-            return;
-        }
-        bookings = bookings || [];
-        var labelStyle = { fontFamily: t.fontMono, fontSize: '11px', colors: t.muted };
-        var titleStyle = { fontFamily: t.fontBody, fontSize: '12px', fontWeight: 500, color: t.muted };
-        new ApexCharts(el, {
-            chart: {
-                type: 'bar',
-                height: 300,
-                toolbar: { show: false },
-                fontFamily: t.fontBody,
-                foreColor: t.muted,
-                background: 'transparent'
-            },
-            series: [{ name: 'Estimated Time (in hours)', data: bookings }],
-            colors: [t.brand],
-            plotOptions: { bar: { horizontal: false, columnWidth: '30%', endingShape: 'rounded' } },
-            dataLabels: { enabled: false },
-            grid: {
-                borderColor: t.grid,
-                strokeDashArray: 3,
-                xaxis: { lines: { show: false } }
-            },
-            xaxis: {
-                title: { text: 'Vehicles', style: titleStyle },
-                categories: bookings.map(function (item) { return item.x + ' (' + item.vehiclesCount + ')'; }),
-                axisBorder: { show: false },
-                axisTicks: { show: false },
-                labels: { style: labelStyle }
-            },
-            yaxis: {
-                title: { text: 'Time (in hours)', style: titleStyle },
-                min: 0,
-                max: 12,
-                tickAmount: 11,
-                labels: {
-                    style: labelStyle,
-                    formatter: function (val) { return val.toFixed(0); }
-                }
-            },
-            tooltip: { theme: t.dark ? 'dark' : 'light' }
-        }).render();
-    }
-
     function drawCharts() {
-        var data = readData();
-        var real = data.real || {};
-        var sample = data.sample || {};
-        var t = readTokens();
-
-        if (typeof Chart !== 'undefined') {
-            drawMileage(t, sample.mileage);
-            drawMaintenance(t, sample.maintenanceCosts);
-            drawFleetStatus(t, sample.fleetStatus);
-            drawRides(t, real.rides);
+        var sample = readData().sample || {};
+        if (typeof Chart === 'undefined') {
+            return;
         }
-        drawVehicleBookings(t, real.vehicleBookings);
+        var t = readTokens();
+        drawMileage(t, sample.mileage);
+        drawMaintenance(t, sample.maintenanceCosts);
+        drawFleetStatus(t, sample.fleetStatus);
     }
 
     /* ----------------------------------------------------------- interactions */
@@ -404,27 +284,7 @@
         });
     }
 
-    function wireActions() {
-        // Same behaviour as the old dashboard's Reset: clear the fields, hide the agent chip.
-        var reset = document.getElementById('ffd-filter-reset');
-        if (reset) {
-            reset.addEventListener('click', function () {
-                ['ffd-agent', 'ffd-date', 'ffd-to-date'].forEach(function (id) {
-                    var field = document.getElementById(id);
-                    if (field) {
-                        field.value = '';
-                    }
-                });
-                var chip = document.getElementById('ffd-agent-chip');
-                if (chip) {
-                    chip.hidden = true;
-                }
-            });
-        }
-    }
-
     wireTaskFilter();
-    wireActions();
 
     // Draw after the web fonts load so canvas text uses DM Mono / Inter.
     if (document.fonts && document.fonts.ready) {

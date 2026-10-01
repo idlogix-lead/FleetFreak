@@ -43,7 +43,6 @@
             ? App\Models\Notification::admin_all_notifications()
             : App\Models\Notification::agent_all_notifications();
     }
-    $ffsUnapprovedAgents = $ffsIsAdmin ? App\Models\Partner::unapprovedAgentsCount() : 0;
     $ffsCompany = !$ffsUser->is_super_admin ? $ffsUser->active_company_details() : null;
 @endphp
 
@@ -68,7 +67,7 @@
                 <input type="search" id="ffs-search" class="ffs-search-input" placeholder="Search vehicles, drivers, tasks&hellip;" aria-label="Search (sample, arrives in Phase 7)" readonly>
                 <kbd class="ffs-kbd" id="ffs-search-kbd">&#8984;K</kbd>
             </div>
-            <span class="ffs-sample" title="Search arrives in Phase 7">Sample</span>
+            {{-- <span class="ffs-sample" title="Search arrives in Phase 7">Sample</span> --}}
         </div>
 
         <div class="ffs-actions">
@@ -79,7 +78,11 @@
                 </button>
             @endif
 
-            @if ($ffsIsAdmin)
+            {{-- Commented out on request (2026-10-01), together with the count query it needs: uncomment the block below to restore both. --}}
+            {{-- @if ($ffsIsAdmin)
+                @php
+                    $ffsUnapprovedAgents = App\Models\Partner::unapprovedAgentsCount();
+                @endphp
                 <a class="ffs-icon-btn" href="{{ route('unapproved_agents.index') }}" title="Unapproved Agents" aria-label="Unapproved Agents">
                     <i class='bx bx-user-circle'></i>
                     <span id="notificationCount" class="ffs-badge" @if ($ffsUnapprovedAgents == 0) hidden @endif>{{ $ffsUnapprovedAgents }}</span>
@@ -87,12 +90,12 @@
                 <a class="ffs-icon-btn" href="{{ route('vehicle_loc') }}" title="Vehicle Locations" aria-label="Vehicle Locations">
                     <i class='bx bx-map'></i>
                 </a>
-            @endif
+            @endif --}}
 
             @if ($ffsHasNotifications)
-                <a class="ffs-icon-btn" href="{{ route('orders.create') }}" title="Create Ride" aria-label="Create Ride">
+                {{-- <a class="ffs-icon-btn" href="{{ route('orders.create') }}" title="Create Ride" aria-label="Create Ride">
                     <i class='bx bx-plus-circle'></i>
-                </a>
+                </a> --}}
                 <button type="button" class="ffs-icon-btn" data-bs-toggle="offcanvas" data-bs-target="#notificationOffcanvas"
                     aria-controls="notificationOffcanvas" title="Notifications" aria-label="Notifications ({{ $unread_notifications->count() }} unread)">
                     <i class='bx bx-bell'></i>
