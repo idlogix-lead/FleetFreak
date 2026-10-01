@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToOrganization;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
@@ -29,6 +30,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 class GlJournal extends BaseModel
 {
     use SoftDeletes;
+    use BelongsToOrganization;
 
     static $rules = [
         'company_id' => 'required',
@@ -46,8 +48,11 @@ class GlJournal extends BaseModel
      *
      * @var array
      */
-    // protected $fillable = ['company_id', 'transaction_date', 'debit', 'credit', 'description'];
-    protected $guarded = [];
+    protected $fillable = [
+        'company_id', 'transaction_date', 'debit', 'credit', 'description',
+        'created_by', 'updated_by', 'status', 'document_no',
+        'created_at', 'updated_at',
+    ];
 
 
     /**

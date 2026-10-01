@@ -8,8 +8,10 @@ use App\Models\TimeLog;
 
 class TimeLogController extends Controller
 {
-    //
-
+    public function __construct()
+    {
+        $this->middleware('auth:sanctum');
+    }
 
     public function get_time_logs(){
         $company_id = auth()->user()->active_company();

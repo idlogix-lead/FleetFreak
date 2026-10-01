@@ -263,13 +263,16 @@ class CompanyController extends Controller
 
     public function change_active_company(Request $request){
         $validator = Validator::make($request->all(),[
-            'company_id' => [Rule::exists('user_companies')->where('user_id', auth()->user()->id)],
+            'company_id' => ['required', Rule::exists('user_companies')->where('user_id', auth()->user()->id)],
         ]);
         if ($validator->fails()) {
-            // return back()->with('errors', $validator->errors());
-            Session::flash('errors', $validator->errors());
+            // Reject: a failed membership check must never change (or null) the
+            // user's active company.
+            if ($request->expectsJson()) {
+                return response()->json(['errors' => $validator->errors()->all()], 422);
+            }
 
-            // return response()->json(['errors'=> $validator->errors()->all()], 401);
+            return back()->with('errors', $validator->errors());
         }
         $data = $validator->validated();
 

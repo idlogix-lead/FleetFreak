@@ -2,16 +2,33 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToOrganization;
+use App\Models\Concerns\HasClient;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 class OrderDetail extends BaseModel
 {
     use HasFactory;
-    
+    use BelongsToOrganization;
+    use HasClient;
+
     protected $table = 'order_lines';
 
-    protected $guarded = [];
+    protected $fillable = [
+        'order_id', 'company_id', 'rate_list_id', 'rate', 'status',
+        'adult', 'child', 'bags', 'flight_num', 'airline_name',
+        'date', 'pickup_time', 'estimated_time', 'checkout_time', 'is_ac',
+        'driver_rate', 'driver_pickup_loc', 'driver_dropoff_loc',
+        'ride_start_mileage', 'ride_end_mileage', 'from_loc', 'to_loc',
+        'driver_id', 'vehicle_id', 'weight', 'type_of_load', 'unit',
+        'with_driver', 'end_date', 'duration',
+        'client_id', 'product_id', 'date_promised', 'date_ordered',
+        'quantity', 'order_qty', 'delivered_qty', 'reserved_qty', 'invoiced_qty',
+        'unit_price', 'list_price', 'discount', 'tax_value',
+        'line_amount', 'total_line_amount', 'seq_no', 'tax_id',
+        'created_at', 'updated_at',
+    ];
 
     public function order()
     {

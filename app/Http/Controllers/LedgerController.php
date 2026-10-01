@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Driver;
+use App\Support\OrganizationAccess;
 use App\Models\Order;
 use App\Models\OrderDetail;
 use App\Models\Partner;
@@ -158,7 +159,7 @@ class LedgerController extends Controller
 
             if ($agentQuery || $fromDate || $toDate) {
                 // Opening line summary query before fromDate
-                $openingSummaryQuery = Order::query()
+                $openingSummaryQuery = Order::query()->withoutGlobalOrganizationalScope()->where('orders.company_id', OrganizationAccess::companyId())
                     ->select(
                         DB::raw("'' as agent"),
                         DB::raw("'' as customer"),
@@ -166,7 +167,7 @@ class LedgerController extends Controller
                         DB::raw("'' as tr_date"),
                         DB::raw("'' as tr_no"),
                         DB::raw("'' as description"),
-                        DB::raw("sum(od.rate) as debit"),
+                        DB::raw("sum(NULLIF(od.rate, '')::numeric) as debit"),
                         DB::raw("0 as credit")
                     )
                     ->join('order_lines as od', 'orders.id', '=', 'od.order_id')
@@ -178,7 +179,7 @@ class LedgerController extends Controller
                         $query->where('od.date', '<', $fromDate);
                     })
                     ->unionAll(
-                        PaymentHeader::query()
+                        PaymentHeader::query()->withoutGlobalOrganizationalScope()->where('payment_headers.company_id', OrganizationAccess::companyId())
                             ->select(
                                 DB::raw("'' as agent"),
                                 DB::raw("'' as customer"),
@@ -187,7 +188,7 @@ class LedgerController extends Controller
                                 DB::raw("'' as tr_no"),
                                 DB::raw("'' as description"),
                                 DB::raw("0 as debit"),
-                                DB::raw("sum(payment_lines.total_amount) as credit")
+                                DB::raw("sum(NULLIF(payment_lines.total_amount, '')::numeric) as credit")
                             )
                             ->join('payment_lines', 'payment_headers.id', '=', 'payment_lines.payment_header_id')
                             ->when($agentQuery, function ($query) use ($agentQuery) {
@@ -199,15 +200,15 @@ class LedgerController extends Controller
                     );
 
                 // Order query between fromDate and toDate
-                $orderQuery = Order::query()
+                $orderQuery = Order::query()->withoutGlobalOrganizationalScope()->where('orders.company_id', OrganizationAccess::companyId())
                     ->select(
                         'partners.name as agent',
                         'customers.name as customer',
                         DB::raw("'inv' as trtype"),
-                        'order_lines.date as tr_date',
+                        DB::raw("order_lines.date::text as tr_date"),
                         DB::raw("concat(orders.order_no, '-', order_lines.id) as tr_no"),
                         'orders.description as description',
-                        'order_lines.rate as debit',
+                        DB::raw("NULLIF(order_lines.rate, '')::numeric as debit"),
                         DB::raw("0 as credit")
                     )
                     ->join('order_lines', 'orders.id', '=', 'order_lines.order_id')
@@ -222,16 +223,16 @@ class LedgerController extends Controller
                     });
 
                 // Payment query between fromDate and toDate
-                $paymentQuery = PaymentHeader::query()
+                $paymentQuery = PaymentHeader::query()->withoutGlobalOrganizationalScope()->where('payment_headers.company_id', OrganizationAccess::companyId())
                     ->select(
                         'agents.name as agent',
                         'customers.name as customer',
                         DB::raw("'pay' as trtype"),
-                        'payment_headers.date as tr_date',
+                        DB::raw("payment_headers.date::text as tr_date"),
                         'payment_headers.payment_no as tr_no',
                         'payment_headers.description as description',
                         DB::raw("0 as debit"),
-                        'payment_lines.total_amount as credit'
+                        DB::raw("NULLIF(payment_lines.total_amount, '')::numeric as credit")
                     )
                     ->join('payment_lines', 'payment_headers.id', '=', 'payment_lines.payment_header_id')
                     ->join('partners as agents', 'payment_headers.agent_id', '=', 'agents.id')
@@ -280,7 +281,7 @@ class LedgerController extends Controller
         else{
             if ($fromDate || $toDate) {
                 // Opening line summary query before fromDate
-                $openingSummaryQuery = Order::query()
+                $openingSummaryQuery = Order::query()->withoutGlobalOrganizationalScope()->where('orders.company_id', OrganizationAccess::companyId())
                     ->select(
                         DB::raw("'' as agent"),
                         DB::raw("'' as customer"),
@@ -288,7 +289,7 @@ class LedgerController extends Controller
                         DB::raw("'' as tr_date"),
                         DB::raw("'' as tr_no"),
                         DB::raw("'' as description"),
-                        DB::raw("sum(od.rate) as debit"),
+                        DB::raw("sum(NULLIF(od.rate, '')::numeric) as debit"),
                         DB::raw("0 as credit")
                     )
                     ->join('order_lines as od', 'orders.id', '=', 'od.order_id')
@@ -300,7 +301,7 @@ class LedgerController extends Controller
                         $query->where('od.date', '<', $fromDate);
                     })
                     ->unionAll(
-                        PaymentHeader::query()
+                        PaymentHeader::query()->withoutGlobalOrganizationalScope()->where('payment_headers.company_id', OrganizationAccess::companyId())
                             ->select(
                                 DB::raw("'' as agent"),
                                 DB::raw("'' as customer"),
@@ -309,7 +310,7 @@ class LedgerController extends Controller
                                 DB::raw("'' as tr_no"),
                                 DB::raw("'' as description"),
                                 DB::raw("0 as debit"),
-                                DB::raw("sum(payment_lines.total_amount) as credit")
+                                DB::raw("sum(NULLIF(payment_lines.total_amount, '')::numeric) as credit")
                             )
                             ->join('payment_lines', 'payment_headers.id', '=', 'payment_lines.payment_header_id')
                             ->when($agentQuery, function ($query) use ($agentQuery) {
@@ -321,15 +322,15 @@ class LedgerController extends Controller
                     );
 
                 // Order query between fromDate and toDate
-                $orderQuery = Order::query()
+                $orderQuery = Order::query()->withoutGlobalOrganizationalScope()->where('orders.company_id', OrganizationAccess::companyId())
                     ->select(
                         'partners.name as agent',
                         'customers.name as customer',
                         DB::raw("'inv' as trtype"),
-                        'order_lines.date as tr_date',
+                        DB::raw("order_lines.date::text as tr_date"),
                         DB::raw("concat(orders.order_no, '-', order_lines.id) as tr_no"),
                         'orders.description as description',
-                        'order_lines.rate as debit',
+                        DB::raw("NULLIF(order_lines.rate, '')::numeric as debit"),
                         DB::raw("0 as credit")
                     )
                     ->join('order_lines', 'orders.id', '=', 'order_lines.order_id')
@@ -344,16 +345,16 @@ class LedgerController extends Controller
                     });
 
                 // Payment query between fromDate and toDate
-                $paymentQuery = PaymentHeader::query()
+                $paymentQuery = PaymentHeader::query()->withoutGlobalOrganizationalScope()->where('payment_headers.company_id', OrganizationAccess::companyId())
                     ->select(
                         'agents.name as agent',
                         'customers.name as customer',
                         DB::raw("'pay' as trtype"),
-                        'payment_headers.date as tr_date',
+                        DB::raw("payment_headers.date::text as tr_date"),
                         'payment_headers.payment_no as tr_no',
                         'payment_headers.description as description',
                         DB::raw("0 as debit"),
-                        'payment_lines.total_amount as credit'
+                        DB::raw("NULLIF(payment_lines.total_amount, '')::numeric as credit")
                     )
                     ->join('payment_lines', 'payment_headers.id', '=', 'payment_lines.payment_header_id')
                     ->join('partners as agents', 'payment_headers.agent_id', '=', 'agents.id')
@@ -432,7 +433,7 @@ class LedgerController extends Controller
 
             if ($agentQuery || $fromDate || $toDate) {
                 // Opening line summary query before fromDate
-                $openingSummaryQuery = Order::query()
+                $openingSummaryQuery = Order::query()->withoutGlobalOrganizationalScope()->where('orders.company_id', OrganizationAccess::companyId())
                     ->select(
                         DB::raw("'' as agent"),
                         DB::raw("'' as customer"),
@@ -440,7 +441,7 @@ class LedgerController extends Controller
                         DB::raw("'' as tr_date"),
                         DB::raw("'' as tr_no"),
                         DB::raw("'' as description"),
-                        DB::raw("sum(od.rate) as debit"),
+                        DB::raw("sum(NULLIF(od.rate, '')::numeric) as debit"),
                         DB::raw("0 as credit")
                     )
                     ->join('order_lines as od', 'orders.id', '=', 'od.order_id')
@@ -452,7 +453,7 @@ class LedgerController extends Controller
                         $query->where('od.date', '<', $fromDate);
                     })
                     ->unionAll(
-                        PaymentHeader::query()
+                        PaymentHeader::query()->withoutGlobalOrganizationalScope()->where('payment_headers.company_id', OrganizationAccess::companyId())
                             ->select(
                                 DB::raw("'' as agent"),
                                 DB::raw("'' as customer"),
@@ -461,7 +462,7 @@ class LedgerController extends Controller
                                 DB::raw("'' as tr_no"),
                                 DB::raw("'' as description"),
                                 DB::raw("0 as debit"),
-                                DB::raw("sum(payment_lines.total_amount) as credit")
+                                DB::raw("sum(NULLIF(payment_lines.total_amount, '')::numeric) as credit")
                             )
                             ->join('payment_lines', 'payment_headers.id', '=', 'payment_lines.payment_header_id')
                             ->when($agentQuery, function ($query) use ($agentQuery) {
@@ -473,15 +474,15 @@ class LedgerController extends Controller
                     );
 
                 // Order query between fromDate and toDate
-                $orderQuery = Order::query()
+                $orderQuery = Order::query()->withoutGlobalOrganizationalScope()->where('orders.company_id', OrganizationAccess::companyId())
                     ->select(
                         'partners.name as agent',
                         'customers.name as customer',
                         DB::raw("'inv' as trtype"),
-                        'order_lines.date as tr_date',
+                        DB::raw("order_lines.date::text as tr_date"),
                         DB::raw("concat(orders.order_no, '-', order_lines.id) as tr_no"),
                         'orders.description as description',
-                        'order_lines.rate as debit',
+                        DB::raw("NULLIF(order_lines.rate, '')::numeric as debit"),
                         DB::raw("0 as credit")
                     )
                     ->join('order_lines', 'orders.id', '=', 'order_lines.order_id')
@@ -496,16 +497,16 @@ class LedgerController extends Controller
                     });
 
                 // Payment query between fromDate and toDate
-                $paymentQuery = PaymentHeader::query()
+                $paymentQuery = PaymentHeader::query()->withoutGlobalOrganizationalScope()->where('payment_headers.company_id', OrganizationAccess::companyId())
                     ->select(
                         'agents.name as agent',
                         'customers.name as customer',
                         DB::raw("'pay' as trtype"),
-                        'payment_headers.date as tr_date',
+                        DB::raw("payment_headers.date::text as tr_date"),
                         'payment_headers.payment_no as tr_no',
                         'payment_headers.description as description',
                         DB::raw("0 as debit"),
-                        'payment_lines.total_amount as credit'
+                        DB::raw("NULLIF(payment_lines.total_amount, '')::numeric as credit")
                     )
                     ->join('payment_lines', 'payment_headers.id', '=', 'payment_lines.payment_header_id')
                     ->join('partners as agents', 'payment_headers.agent_id', '=', 'agents.id')
@@ -554,7 +555,7 @@ class LedgerController extends Controller
         else{
             if ($fromDate || $toDate) {
                 // Opening line summary query before fromDate
-                $openingSummaryQuery = Order::query()
+                $openingSummaryQuery = Order::query()->withoutGlobalOrganizationalScope()->where('orders.company_id', OrganizationAccess::companyId())
                     ->select(
                         DB::raw("'' as agent"),
                         DB::raw("'' as customer"),
@@ -562,7 +563,7 @@ class LedgerController extends Controller
                         DB::raw("'' as tr_date"),
                         DB::raw("'' as tr_no"),
                         DB::raw("'' as description"),
-                        DB::raw("sum(od.rate) as debit"),
+                        DB::raw("sum(NULLIF(od.rate, '')::numeric) as debit"),
                         DB::raw("0 as credit")
                     )
                     ->join('order_lines as od', 'orders.id', '=', 'od.order_id')
@@ -574,7 +575,7 @@ class LedgerController extends Controller
                         $query->where('od.date', '<', $fromDate);
                     })
                     ->unionAll(
-                        PaymentHeader::query()
+                        PaymentHeader::query()->withoutGlobalOrganizationalScope()->where('payment_headers.company_id', OrganizationAccess::companyId())
                             ->select(
                                 DB::raw("'' as agent"),
                                 DB::raw("'' as customer"),
@@ -583,7 +584,7 @@ class LedgerController extends Controller
                                 DB::raw("'' as tr_no"),
                                 DB::raw("'' as description"),
                                 DB::raw("0 as debit"),
-                                DB::raw("sum(payment_lines.total_amount) as credit")
+                                DB::raw("sum(NULLIF(payment_lines.total_amount, '')::numeric) as credit")
                             )
                             ->join('payment_lines', 'payment_headers.id', '=', 'payment_lines.payment_header_id')
                             ->when($agentQuery, function ($query) use ($agentQuery) {
@@ -595,15 +596,15 @@ class LedgerController extends Controller
                     );
 
                 // Order query between fromDate and toDate
-                $orderQuery = Order::query()
+                $orderQuery = Order::query()->withoutGlobalOrganizationalScope()->where('orders.company_id', OrganizationAccess::companyId())
                     ->select(
                         'partners.name as agent',
                         'customers.name as customer',
                         DB::raw("'inv' as trtype"),
-                        'order_lines.date as tr_date',
+                        DB::raw("order_lines.date::text as tr_date"),
                         DB::raw("concat(orders.order_no, '-', order_lines.id) as tr_no"),
                         'orders.description as description',
-                        'order_lines.rate as debit',
+                        DB::raw("NULLIF(order_lines.rate, '')::numeric as debit"),
                         DB::raw("0 as credit")
                     )
                     ->join('order_lines', 'orders.id', '=', 'order_lines.order_id')
@@ -618,16 +619,16 @@ class LedgerController extends Controller
                     });
 
                 // Payment query between fromDate and toDate
-                $paymentQuery = PaymentHeader::query()
+                $paymentQuery = PaymentHeader::query()->withoutGlobalOrganizationalScope()->where('payment_headers.company_id', OrganizationAccess::companyId())
                     ->select(
                         'agents.name as agent',
                         'customers.name as customer',
                         DB::raw("'pay' as trtype"),
-                        'payment_headers.date as tr_date',
+                        DB::raw("payment_headers.date::text as tr_date"),
                         'payment_headers.payment_no as tr_no',
                         'payment_headers.description as description',
                         DB::raw("0 as debit"),
-                        'payment_lines.total_amount as credit'
+                        DB::raw("NULLIF(payment_lines.total_amount, '')::numeric as credit")
                     )
                     ->join('payment_lines', 'payment_headers.id', '=', 'payment_lines.payment_header_id')
                     ->join('partners as agents', 'payment_headers.agent_id', '=', 'agents.id')
@@ -697,6 +698,10 @@ class LedgerController extends Controller
         ];
         if(auth()->user()->actor_id==2){
             $driverQuery = $request->input('agent');
+        }
+        elseif(auth()->user()->actor_id==5){
+            // Drivers only ever see their own ledger; the 'agent' filter is ignored.
+            $driverQuery = auth()->user()->partner_id;
         }
         // for agent side:
         // else{
@@ -806,11 +811,15 @@ class LedgerController extends Controller
         //         $ledgerEntries = DB::select($rawquery);
         // }
         // ----------------------------------------------------
-        if(auth()->user()->actor_id == 2) {
+        // Other non-admin roles have no driver ledger view: empty page, not a 500.
+        $ledgerEntries = new LengthAwarePaginator([], 0, 15, 1, [
+            'path' => LengthAwarePaginator::resolveCurrentPath(),
+        ]);
+        if(auth()->user()->actor_id == 2 || (auth()->user()->actor_id == 5 && $driverQuery)) {
 
             if ($driverQuery || $fromDate || $toDate) {
                 // Opening line summary query before fromDate
-                $openingSummaryQuery = Order::query()
+                $openingSummaryQuery = Order::query()->withoutGlobalOrganizationalScope()->where('orders.company_id', OrganizationAccess::companyId())
                     ->select(
                         DB::raw("'' as driver"),
                         DB::raw("'' as customer"),
@@ -818,8 +827,8 @@ class LedgerController extends Controller
                         DB::raw("'' as tr_date"),
                         DB::raw("'' as tr_no"),
                         DB::raw("'' as description"),
-                        DB::raw("sum(COALESCE(od.rate, od.driver_rate)) as debit"),
-                        // DB::raw("sum(od.rate) as debit"),
+                        DB::raw("sum(NULLIF(COALESCE(od.rate, od.driver_rate), '')::numeric) as debit"),
+                        // DB::raw("sum(NULLIF(od.rate, '')::numeric) as debit"),
                         DB::raw("0 as credit")
                     )
                     ->join('order_lines as od', 'orders.id', '=', 'od.order_id')
@@ -833,7 +842,7 @@ class LedgerController extends Controller
                         $query->where('od.date', '<', $fromDate);
                     })
                     ->unionAll(
-                        PaymentHeader::query()
+                        PaymentHeader::query()->withoutGlobalOrganizationalScope()->where('payment_headers.company_id', OrganizationAccess::companyId())
                             ->select(
                                 DB::raw("'' as driver"),
                                 DB::raw("'' as customer"),
@@ -842,7 +851,7 @@ class LedgerController extends Controller
                                 DB::raw("'' as tr_no"),
                                 DB::raw("'' as description"),
                                 DB::raw("0 as debit"),
-                                DB::raw("sum(payment_lines.total_amount) as credit")
+                                DB::raw("sum(NULLIF(payment_lines.total_amount, '')::numeric) as credit")
                             )
                             ->join('payment_lines', 'payment_headers.id', '=', 'payment_lines.payment_header_id')
                             ->when($driverQuery, function ($query) use ($driverQuery) {
@@ -854,15 +863,15 @@ class LedgerController extends Controller
                     );
 
                 // Order query between fromDate and toDate
-                $orderQuery = Order::query()
+                $orderQuery = Order::query()->withoutGlobalOrganizationalScope()->where('orders.company_id', OrganizationAccess::companyId())
                     ->select(
                         'drivers.name as driver',
                         'customers.name as customer',
                         DB::raw("'inv' as trtype"),
-                        'order_lines.date as tr_date',
+                        DB::raw("order_lines.date::text as tr_date"),
                         DB::raw("concat(orders.order_no, '-', order_lines.id) as tr_no"),
                         'orders.description as description',
-                        DB::raw("COALESCE(order_lines.rate, order_lines.driver_rate) as debit"),
+                        DB::raw("NULLIF(COALESCE(order_lines.rate, order_lines.driver_rate), '')::numeric as debit"),
                         // 'order_lines.rate as debit',
                         DB::raw("0 as credit")
                     )
@@ -879,16 +888,16 @@ class LedgerController extends Controller
                     });
 
                 // Payment query between fromDate and toDate
-                $paymentQuery = PaymentHeader::query()
+                $paymentQuery = PaymentHeader::query()->withoutGlobalOrganizationalScope()->where('payment_headers.company_id', OrganizationAccess::companyId())
                     ->select(
                         'drivers.name as driver',
                         'customers.name as customer',
                         DB::raw("'pay' as trtype"),
-                        'payment_headers.date as tr_date',
+                        DB::raw("payment_headers.date::text as tr_date"),
                         'payment_headers.payment_no as tr_no',
                         'payment_headers.description as description',
                         DB::raw("0 as debit"),
-                        'payment_lines.total_amount as credit'
+                        DB::raw("NULLIF(payment_lines.total_amount, '')::numeric as credit")
                     )
                     ->join('payment_lines', 'payment_headers.id', '=', 'payment_lines.payment_header_id')
                     ->join('partners as drivers', 'payment_headers.driver_id', '=', 'drivers.id')
@@ -939,7 +948,7 @@ class LedgerController extends Controller
         // else{
         //     if ($fromDate || $toDate) {
         //         // Opening line summary query before fromDate
-        //         $openingSummaryQuery = Order::query()
+        //         $openingSummaryQuery = Order::query()->withoutGlobalOrganizationalScope()->where('orders.company_id', OrganizationAccess::companyId())
         //             ->select(
         //                 DB::raw("'' as agent"),
         //                 DB::raw("'' as customer"),
@@ -947,7 +956,7 @@ class LedgerController extends Controller
         //                 DB::raw("'' as tr_date"),
         //                 DB::raw("'' as tr_no"),
         //                 DB::raw("'' as description"),
-        //                 DB::raw("sum(od.rate) as debit"),
+        //                 DB::raw("sum(NULLIF(od.rate, '')::numeric) as debit"),
         //                 DB::raw("0 as credit")
         //             )
         //             ->join('order_details as od', 'orders.id', '=', 'od.order_id')
@@ -959,7 +968,7 @@ class LedgerController extends Controller
         //                 $query->where('od.date', '<', $fromDate);
         //             })
         //             ->unionAll(
-        //                 PaymentHeader::query()
+        //                 PaymentHeader::query()->withoutGlobalOrganizationalScope()->where('payment_headers.company_id', OrganizationAccess::companyId())
         //                     ->select(
         //                         DB::raw("'' as agent"),
         //                         DB::raw("'' as customer"),
@@ -968,7 +977,7 @@ class LedgerController extends Controller
         //                         DB::raw("'' as tr_no"),
         //                         DB::raw("'' as description"),
         //                         DB::raw("0 as debit"),
-        //                         DB::raw("sum(payment_lines.total_amount) as credit")
+        //                         DB::raw("sum(NULLIF(payment_lines.total_amount, '')::numeric) as credit")
         //                     )
         //                     ->join('payment_lines', 'payment_headers.id', '=', 'payment_lines.payment_header_id')
         //                     ->when($agentQuery, function ($query) use ($agentQuery) {
@@ -980,7 +989,7 @@ class LedgerController extends Controller
         //             );
 
         //         // Order query between fromDate and toDate
-        //         $orderQuery = Order::query()
+        //         $orderQuery = Order::query()->withoutGlobalOrganizationalScope()->where('orders.company_id', OrganizationAccess::companyId())
         //             ->select(
         //                 'partners.name as agent',
         //                 'customers.name as customer',
@@ -1003,16 +1012,16 @@ class LedgerController extends Controller
         //             });
 
         //         // Payment query between fromDate and toDate
-        //         $paymentQuery = PaymentHeader::query()
+        //         $paymentQuery = PaymentHeader::query()->withoutGlobalOrganizationalScope()->where('payment_headers.company_id', OrganizationAccess::companyId())
         //             ->select(
         //                 'agents.name as agent',
         //                 'customers.name as customer',
         //                 DB::raw("'pay' as trtype"),
-        //                 'payment_headers.date as tr_date',
+        //                 DB::raw("payment_headers.date::text as tr_date"),
         //                 'payment_headers.payment_no as tr_no',
         //                 'payment_headers.description as description',
         //                 DB::raw("0 as debit"),
-        //                 'payment_lines.total_amount as credit'
+        //                 DB::raw("NULLIF(payment_lines.total_amount, '')::numeric as credit")
         //             )
         //             ->join('payment_lines', 'payment_headers.id', '=', 'payment_lines.payment_header_id')
         //             ->join('partners as agents', 'payment_headers.agent_id', '=', 'agents.id')
@@ -1109,15 +1118,21 @@ class LedgerController extends Controller
         if(auth()->user()->actor_id==2){
             $driverQuery = $request->input('agent');
         }
+        elseif(auth()->user()->actor_id==5){
+            // Drivers only ever export their own ledger; the 'agent' filter is ignored.
+            $driverQuery = auth()->user()->partner_id;
+        }
 
         $fromDate = $request->input('from_date');
         $toDate = $request->input('to_date');
 
-        if(auth()->user()->actor_id == 2) {
+        // Other non-admin roles have no driver ledger: an empty export, not a 500.
+        $ledgerEntries = [];
+        if(auth()->user()->actor_id == 2 || (auth()->user()->actor_id == 5 && $driverQuery)) {
 
             if ($driverQuery || $fromDate || $toDate) {
                 // Opening line summary query before fromDate
-                $openingSummaryQuery = Order::query()
+                $openingSummaryQuery = Order::query()->withoutGlobalOrganizationalScope()->where('orders.company_id', OrganizationAccess::companyId())
                     ->select(
                         DB::raw("'' as driver"),
                         DB::raw("'' as customer"),
@@ -1125,8 +1140,8 @@ class LedgerController extends Controller
                         DB::raw("'' as tr_date"),
                         DB::raw("'' as tr_no"),
                         DB::raw("'' as description"),
-                        DB::raw("sum(COALESCE(od.rate, od.driver_rate)) as debit"),
-                        // DB::raw("sum(od.rate) as debit"),
+                        DB::raw("sum(NULLIF(COALESCE(od.rate, od.driver_rate), '')::numeric) as debit"),
+                        // DB::raw("sum(NULLIF(od.rate, '')::numeric) as debit"),
                         DB::raw("0 as credit")
                     )
                     ->join('order_lines as od', 'orders.id', '=', 'od.order_id')
@@ -1140,7 +1155,7 @@ class LedgerController extends Controller
                         $query->where('od.date', '<', $fromDate);
                     })
                     ->unionAll(
-                        PaymentHeader::query()
+                        PaymentHeader::query()->withoutGlobalOrganizationalScope()->where('payment_headers.company_id', OrganizationAccess::companyId())
                             ->select(
                                 DB::raw("'' as driver"),
                                 DB::raw("'' as customer"),
@@ -1149,7 +1164,7 @@ class LedgerController extends Controller
                                 DB::raw("'' as tr_no"),
                                 DB::raw("'' as description"),
                                 DB::raw("0 as debit"),
-                                DB::raw("sum(payment_lines.total_amount) as credit")
+                                DB::raw("sum(NULLIF(payment_lines.total_amount, '')::numeric) as credit")
                             )
                             ->join('payment_lines', 'payment_headers.id', '=', 'payment_lines.payment_header_id')
                             ->when($driverQuery, function ($query) use ($driverQuery) {
@@ -1161,15 +1176,15 @@ class LedgerController extends Controller
                     );
 
                 // Order query between fromDate and toDate
-                $orderQuery = Order::query()
+                $orderQuery = Order::query()->withoutGlobalOrganizationalScope()->where('orders.company_id', OrganizationAccess::companyId())
                     ->select(
                         'drivers.name as driver',
                         'customers.name as customer',
                         DB::raw("'inv' as trtype"),
-                        'order_lines.date as tr_date',
+                        DB::raw("order_lines.date::text as tr_date"),
                         DB::raw("concat(orders.order_no, '-', order_lines.id) as tr_no"),
                         'orders.description as description',
-                        DB::raw("COALESCE(order_lines.rate, order_lines.driver_rate) as debit"),
+                        DB::raw("NULLIF(COALESCE(order_lines.rate, order_lines.driver_rate), '')::numeric as debit"),
                         // 'order_lines.rate as debit',
                         DB::raw("0 as credit")
                     )
@@ -1186,16 +1201,16 @@ class LedgerController extends Controller
                     });
 
                 // Payment query between fromDate and toDate
-                $paymentQuery = PaymentHeader::query()
+                $paymentQuery = PaymentHeader::query()->withoutGlobalOrganizationalScope()->where('payment_headers.company_id', OrganizationAccess::companyId())
                     ->select(
                         'drivers.name as driver',
                         'customers.name as customer',
                         DB::raw("'pay' as trtype"),
-                        'payment_headers.date as tr_date',
+                        DB::raw("payment_headers.date::text as tr_date"),
                         'payment_headers.payment_no as tr_no',
                         'payment_headers.description as description',
                         DB::raw("0 as debit"),
-                        'payment_lines.total_amount as credit'
+                        DB::raw("NULLIF(payment_lines.total_amount, '')::numeric as credit")
                     )
                     ->join('payment_lines', 'payment_headers.id', '=', 'payment_lines.payment_header_id')
                     ->join('partners as drivers', 'payment_headers.driver_id', '=', 'drivers.id')

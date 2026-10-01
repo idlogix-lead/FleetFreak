@@ -14,7 +14,8 @@ class RateListExport implements FromCollection, WithHeadings, WithMapping
     */
     public function collection()
     {
-        return RateList::all();
+        // Same rows as RateListController::index.
+        return RateList::checkGlobal(8)->get();
     }
 
     public function map($ratelist): array

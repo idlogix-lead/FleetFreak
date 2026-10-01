@@ -146,7 +146,13 @@ class VehicleDashboardController extends Controller
 
             // top 10 highest revenue generated vehicles:
 
-            $topVehicles = AccountTransaction::where('account_id', 5) // Filter for ride revenue
+            // Resolve "Ride Revenue" from this company's chart of accounts —
+            // never a hard-coded account id (account ids differ per company).
+            $rideRevenueAccountIds = \App\Models\Account::where('company_id', auth()->user()->active_company())
+                ->where('name', 'Ride Revenue')
+                ->pluck('id');
+
+            $topVehicles = AccountTransaction::whereIn('account_id', $rideRevenueAccountIds)
                 ->join('order_lines', 'account_transactions.line_id', '=', 'order_lines.id') // Join OrderDetail
                 ->join('vehicles', 'order_lines.vehicle_id', '=', 'vehicles.id') // Join Vehicles
                 ->select('order_lines.vehicle_id', 'vehicles.vehicle_no', DB::raw('SUM(account_transactions.credit) as total_revenue')) // Sum revenue

@@ -13,6 +13,9 @@ npm-debug.log
 yarn-error.log
 /.idea
 /.vscode
-composer.lock
 !.gitignore
 firebase_credentials.json
+.phpunit.cache/
+
+# Local MCP server config (may hold credentials) - never commit
+.mcp.json

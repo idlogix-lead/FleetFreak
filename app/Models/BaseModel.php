@@ -12,12 +12,26 @@ class BaseModel extends Model
     {
         parent::boot();
 
-        static::saved(function ($model) {
-            $tableName = $model->getTable();
-            $primaryKey = $model->getKeyName();
-            $sequenceName = "{$tableName}_{$primaryKey}_seq"; // Adjust as needed
+        // static::saved(function ($model) {
+        //     $tableName = $model->getTable();
+        //     $primaryKey = $model->getKeyName();
+        //     $sequenceName = "{$tableName}_{$primaryKey}_seq"; // Adjust as needed
 
-            $model->getConnection()->statement("SELECT setval('{$sequenceName}', (SELECT MAX({$primaryKey}) from \"{$tableName}\"));");
+        //     $model->getConnection()->statement("SELECT setval('{$sequenceName}', (SELECT MAX({$primaryKey}) from \"{$tableName}\"));");
+        // });
+        static::saved(function ($model) {
+
+            // Only run sequence reset for PostgreSQL
+            if ($model->getConnection()->getDriverName() === 'pgsql') {
+
+                $tableName = $model->getTable();
+                $primaryKey = $model->getKeyName();
+                $sequenceName = "{$tableName}_{$primaryKey}_seq";
+
+                $model->getConnection()->statement(
+                    "SELECT setval('{$sequenceName}', (SELECT MAX({$primaryKey}) FROM \"{$tableName}\"));"
+                );
+            }
         });
     }
 }

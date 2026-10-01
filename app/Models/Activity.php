@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToOrganization;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
@@ -29,6 +30,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 class Activity extends BaseModel
 {
     use SoftDeletes;
+    use BelongsToOrganization;
 
     // static $rules = [
 	// 		'name' => 'required|string',
@@ -43,8 +45,10 @@ class Activity extends BaseModel
      *
      * @var array
      */
-    // protected $fillable = ['name', 'description', 'company_id', 'is_active'];
-    protected $guarded = [];
+    protected $fillable = [
+        'name', 'description', 'company_id', 'is_active',
+        'created_by', 'updated_by', 'created_at', 'updated_at',
+    ];
 
 
     /**

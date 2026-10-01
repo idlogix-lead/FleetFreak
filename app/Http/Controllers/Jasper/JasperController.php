@@ -167,13 +167,24 @@ class JasperController extends Controller
             }break;
         }
     }
+    /**
+     * Interim gate (Phase 1): only explicitly shipped reports may run, and only
+     * for authenticated users. Static dispatch to the per-report sub-controllers
+     * bypasses their constructor middleware, so this allow-list is the real gate
+     * until per-report RBAC wiring lands in Phase 7.
+     */
+    private const ALLOWED_REPORTS = [
+        'trial_balance_two_column_FF',
+        'users',
+        'user_filter',
+        'testingusers',
+    ];
+
     public static function report($report,$ext = "pdf"){
 
-        // $permission = ReportPermissions::whereIn('role_id', auth()->user()->roles->pluck('role_id')->toArray())
-        // ->where('report_name', $report)->first();
-        // if(!$permission && $report != 'request') {
-        //     abort(404);
-        // }
+        if (!auth()->check() || !in_array($report, self::ALLOWED_REPORTS, true)) {
+            abort(403, 'Report not allowed.');
+        }
 
         $src = storage_path(source_path);
         $reports = JasperController::read_files($src);

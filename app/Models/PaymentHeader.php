@@ -2,13 +2,22 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToOrganization;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 class PaymentHeader extends BaseModel
 {
     use HasFactory;
-    protected $guarded = [];
+    use BelongsToOrganization;
+
+    protected $fillable = [
+        'payment_no', 'agent_id', 'customer_id', 'driver_id', 'date',
+        'total_amount', 'description', 'status', 'company_id',
+        'created_by', 'updated_by',
+        'type', 'business_partner_id', 'actor_id',
+        'created_at', 'updated_at',
+    ];
     public function paymentLines()
     {
         return $this->hasMany(PaymentLine::class);

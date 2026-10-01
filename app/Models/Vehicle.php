@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToOrganization;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Model;
 
@@ -32,6 +33,7 @@ use Illuminate\Database\Eloquent\Model;
  */
 class Vehicle extends BaseModel
 {
+    use BelongsToOrganization;
 
     // static $rules = [
     //         'vehicle_identification_number' => 'required|alpha_num',
@@ -56,8 +58,24 @@ class Vehicle extends BaseModel
      *
      * @var array
      */
-    // protected $fillable = ['vehicle_identification_number', 'vehicle_company_id', 'model', 'year', 'color', 'license_plate_number', 'registration', 'ownership', 'fuel_type', 'engine_type', 'transmission_type', 'vehicle_class_id', 'weight'];
-    protected $guarded = [];
+    /**
+     * Attributes that should be mass-assignable.
+     *
+     * @var array
+     */
+    protected $fillable = [
+        'vehicle_identification_number', 'driver_id', 'vehicle_company_id',
+        'model', 'year', 'color', 'vehicle_no', 'registration_no',
+        'ownership', 'is_ac', 'is_status', 'fuel_type', 'engine_type', 'transmission_type',
+        'company_id', 'vehicle_class_id', 'vehicle_model_id',
+        'weight', 'milage', 'car_condition', 'image', 'reason',
+        'created_by', 'updated_by',
+        'maintenance_interval_days', 'maintenance_oilchange_interval_km',
+        'chassis_no', 'route_permits_no', 'route_permits_expiry_date',
+        'fitness_certificate_no', 'insurance_no', 'insurance_provider',
+        'insurance_start_date', 'insurance_provider_contact_no', 'prefix_insurance_provider_contact_no',
+        'created_at', 'updated_at',
+    ];
 
     /**
      * @return \Illuminate\Database\Eloquent\Relations\BelongsTo

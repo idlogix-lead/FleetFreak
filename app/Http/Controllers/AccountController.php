@@ -38,10 +38,9 @@ class AccountController extends Controller
                 'active'=>true,
             ]
         ];
-        $company =  auth()->user()->companies->first();
+        $companyId = auth()->user()->active_company();
         $perPage = $request->input('perPage', 10);
-        // $data['company_id'] = $company->id;
-        $accounts = Account::where('company_id', $company->id)->paginate($perPage);
+        $accounts = Account::where('company_id', $companyId)->paginate($perPage);
 
         return view('account.index', compact('accounts','breadcrumbs'))
             ->with('i', (request()->input('page', 1) - 1) * $accounts->perPage());
