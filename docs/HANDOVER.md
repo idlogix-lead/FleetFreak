@@ -90,6 +90,8 @@ _Refreshed 2026-09-24 (end of the Phase 1 follow-up session). Redesign status ad
     `DashboardController copy 2.php` is deleted; and the format-on-save note is in §5.
 - **2026-10-01:** "Dashboard and app shell: Figma design-only content, header simplified" (§7.7). The working tree is
   clean after it.
+- **2026-10-02:** the employee create/edit fix and the production error pages, committed separately. See §8.
+  Standing rule: never commit, push, amend, reset or stash without being told.
 - Branch: `moeen`. Commit history before 2026-09-29:
   `ff32402` first commit, `c734f18` bootstrap+docs, `721f238` Phase 0,
   `6e1ab1f` housekeeping, `daf4ac3` Phase 1, `0293bc5` handover,
@@ -424,6 +426,10 @@ Pre-existing, unrelated to this program (noticed during verification):
     - employee: no `actor_id`, and no `call_from_employee_controller` flag.
   - `POST /api/update-partner/{Partner}` has the same problem in its customer and employee branches.
   - Check with the app owners whether these endpoints are used before fixing. The web forms are fine.
+- **Public prototype page `/map` (found 2026-10-02).**
+  - `Route::get('/map')` → `home_dashboard/test_map.blade.php` sits outside the auth group.
+  - The page loads Leaflet from unpkg and queries Nominatim (OpenStreetMap) from the browser.
+  - Nothing links to it. Remove it, or move it behind auth, during cleanup.
 - **Recurring fatals on the user's machine**: `storage/logs/laravel.log`
   shows "Cannot redeclare is_active_route() (app/helpers.php)" roughly every
   minute, and earlier "Cannot declare class App\Models\DriverAssignment"
@@ -795,3 +801,72 @@ It's kept on purpose: some components may come back, and restoring one is markup
 - **Test:** `tests/Feature/EmployeeCreateTest.php` covers create with and without a login, an edit that keeps a stored
   driver field, and driver fields still being written. It passes.
 - **Related, not fixed:** the mobile API partner endpoints and the `$$key` pattern (§5).
+
+### 8.2 Production error pages and AJAX error toasts
+
+**Server: `app/Exceptions/Handler.php`.**
+- **Reference ID:** every failing request gets one (`FF-` + 10 characters from a ULID, via `Handler::errorRef()`). It
+  appears on the error page or in the AJAX JSON, and in the log entry.
+- **Reported exceptions** (500 and the like) are logged by Laravel as before, with the full exception and trace,
+  plus `error_ref` and `url` in the context.
+- **HTTP errors** are never "reported", so the handler writes one short line with `error_ref` instead:
+  - 403 at `warning`;
+  - 404, 419, 503 and other 4xx at `debug`;
+  - any other 5xx from `abort()` at `error`.
+
+  `LOG_LEVEL` must be `debug` in production for the 404, 419 and 503 IDs to have a log line.
+- **JSON for AJAX** with debug off: `{message, ref}` only. The message is plain, from `Handler::PUBLIC_MESSAGES`;
+  never the exception message, file or trace.
+- **`APP_DEBUG=true`:** unchanged. Ignition for exceptions; the styled pages for HTTP errors.
+
+**Pages: `resources/views/errors/`.**
+- **One layout,** `shell.blade.php`. It is fully self-contained, with inline CSS and JS, an inline SVG mark and
+  system fonts:
+  - no CDN, no app assets, no network requests;
+  - no `layouts.app`, which needs a signed-in user and the database.
+- **Pages:** 401, 402, 403, 404, 419, 429, 500 and 503, plus `4xx`/`5xx` fallbacks for any other status.
+- **Each page has:**
+  - a plain-English message;
+  - "Back to dashboard";
+  - "Reload page" on 419 and 503;
+  - the reference ID with a Copy button.
+- **Removed:** 403 no longer prints the exception message. 503 no longer loads jQuery from a CDN or the broken
+  `js/main.js`.
+- **`/unauthorized`** (`home_dashboard/no_permission_found.blade.php`, where `RolePermissions` sends denied page
+  requests) uses the same layout. It has no reference ID: it is a redirect target, not a logged error.
+- **Unused now:** the stock `errors/layout.blade.php` and `errors/minimal.blade.php`. Left in place.
+
+**AJAX: `public/assets/js/app-shell.js`, loaded at the end of the header, not deferred.**
+- A global `ajaxError` handler shows one dismissible `msgboxbox` toast for a failed jQuery request: the plain
+  message, plus the reference when the server sent one.
+- It is bound to the layout's jQuery and, once the page has loaded, to a second copy if the page brought one. Five
+  pages do: the 4 driver-assignment pages and the receipts index.
+- It skips 422 validation errors, aborted requests, and requests cut off by leaving the page.
+- **Convention for new code:** a call site that shows its own error message must opt out, or the user gets two
+  messages. Wrap the call, `ffsQuiet($.post(url, data)).then(...).fail(...)`, or pass `{ ffsQuiet: true }` to `$.ajax`.
+  - The flag has to be set at send time, because on jQuery 3 a `.fail()` chained after `.then()` runs after the
+    global event.
+  - 39 existing call sites that show their own message are wrapped.
+  - The 4 call sites in the unused files `calendar/calendar_script` and `home_dashboard/calender_code_for_reference`
+    were left alone.
+- **`fetch()`:** the "5 call sites" from the first count turned out to be dead (backup copies and Blade-commented
+  code), except `/map` (§5), a standalone page with no `msgboxbox`. None were changed.
+
+**Config:** `.env.example` now has `APP_ENV=production` and `APP_DEBUG=false`, with a comment telling local machines
+to set `local` / `true`.
+
+**Verification:**
+- `tests/Feature/ErrorPagesTest.php` passes. For each of 500, 403, 419, 404 and 503 it checks:
+  - the status;
+  - the plain message;
+  - no exception message, path, class or trace;
+  - no external stylesheet, script or font;
+  - that the page's reference ID matches a log entry.
+
+  It also checks that the full details still reach the log, the AJAX JSON shape, that debug mode keeps detailed
+  errors, and `/unauthorized`.
+- **Browser harness** (scratchpad `ajax-harness/`): toasts appear for 500, 419, a permission denial, a plain-text 502,
+  and a 404 sent through a second jQuery copy. No toast for an opted-out call, a 422, the `$.ajax` `ffsQuiet` option,
+  or an aborted request.
+- **Edited views:** all 39 wrapped calls sit in inline scripts that parse before and after the edit (Node check).
+- **Full suite** (with the employee fix): OK, 34 tests, 267 assertions, on `fleet_freak_testing`.

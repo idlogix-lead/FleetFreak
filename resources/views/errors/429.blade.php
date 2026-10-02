@@ -1,5 +1,5 @@
-@extends('errors::minimal')
+@extends('errors.shell')
 
-@section('title', __('Too Many Requests'))
 @section('code', '429')
-@section('message', __('Too Many Requests'))
+@section('title', 'Too many requests')
+@section('message', 'You’ve made a lot of requests in a short time. Wait a minute, then try again.')

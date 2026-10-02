@@ -664,10 +664,10 @@
 
             console.log(structure_id);
             if (structure_id) {
-                $.post('/delete-poline-row/' + structure_id, {
+                ffsQuiet($.post('/delete-poline-row/' + structure_id, {
                     "_token": "{{ csrf_token() }}",
                     "_method": "DELETE",
-                }).then(function(data) {
+                })).then(function(data) {
                      // Check the response from the server
                     if (data.success) {
                         // Remove the row and show success message
@@ -1004,7 +1004,7 @@
             let unitField = $(`#unit_${rowIndex}`);
 
             if (productId) {
-                $.ajax({
+                ffsQuiet($.ajax({
                     url: '{{ route("fetch.product.price") }}', // Laravel route to fetch product price
                     type: 'GET',
                     data: { product_id: productId },
@@ -1023,7 +1023,7 @@
                         rateField.val(''); // Clear the rate field on error
                         alert('Error fetching product price. Please try again.');
                     }
-                });
+                }));
             } else {
                 rateField.val(''); // Clear the rate field if no product is selected
             }

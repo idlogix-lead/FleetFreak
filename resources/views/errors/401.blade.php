@@ -1,5 +1,5 @@
-@extends('errors::minimal')
+@extends('errors.shell')
 
-@section('title', __('Unauthorized'))
 @section('code', '401')
-@section('message', __('Unauthorized'))
+@section('title', 'Please sign in')
+@section('message', 'Your session has ended. Sign in again to continue.')

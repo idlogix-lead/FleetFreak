@@ -39,13 +39,13 @@
             let data = form.serializeArray();
             let arr_data = flattenArray(data);
 
-            $.post(get_host()+'/create_customer/', {
+            ffsQuiet($.post(get_host()+'/create_customer/', {
                 
                         "_token":"{{csrf_token()}}",
                         "_method":"POST",
                         "data": JSON.stringify(arr_data),
                         //console.log(data);
-                    }).then(function(data){
+                    })).then(function(data){
                         //console.log(data);
                         $('#customer_partner_id').empty();
                         $('#customer_partner_id').append('<option value="'+data.id+'" selected>'+data.name+'</option>');

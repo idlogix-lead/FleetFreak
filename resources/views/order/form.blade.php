@@ -2050,10 +2050,10 @@
                 let structure_id = $('#structure_id_' + row_id).val();
                 console.log(structure_id);
                 if (structure_id) {
-                    $.post('/delete-route-row/' + structure_id, {
+                    ffsQuiet($.post('/delete-route-row/' + structure_id, {
                         "_token": "{{ csrf_token() }}",
                         "_method": "DELETE",
-                    }).then(function(data) {
+                    })).then(function(data) {
                         console.log(data);
                         $("#structure_" + row_id).remove();
                         toastr.options = {
@@ -2087,10 +2087,10 @@
             let structure_id = $('#structure_id_' + row_id).val();
             console.log(structure_id);
             if (structure_id) {
-                $.post('/delete-route-row/' + structure_id, {
+                ffsQuiet($.post('/delete-route-row/' + structure_id, {
                     "_token": "{{ csrf_token() }}",
                     "_method": "DELETE",
-                }).then(function(data) {
+                })).then(function(data) {
                     console.log(data);
                     $("#structure_" + row_id).remove();
                     toastr.options = {
@@ -2207,7 +2207,7 @@
                 }
             });
             function fetchAvailableVehicles(rowId, date, time,ratelist_id=null,vehicle_model_id=null,est_time=null) {
-                $.ajax({
+                ffsQuiet($.ajax({
                     url: '{{ route("driver_assignments.assign_vehicle_ajax") }}', // Update with your route name
                     type: 'GET',
                     data: {
@@ -2287,7 +2287,7 @@
                     error: function () {
                         alert('Error fetching available vehicles. Please try again.');
                     }
-                });
+                }));
             }
         })
 

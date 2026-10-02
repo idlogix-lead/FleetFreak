@@ -99,7 +99,7 @@
                         function fetchRouteData(vehicleId) {
                             toggleLoading(true); // Show loading spinner
 
-                            $.ajax(
+                            ffsQuiet($.ajax(
                             {
                             url: `/vehicle/route-history`,
                             type: 'GET',
@@ -156,7 +156,7 @@
                                 console.error("Error fetching route data:", error);
                                 alert("Failed to fetch route data.");
                             }
-                        });
+                        }));
                         }
 
                         // Handle vehicle selection

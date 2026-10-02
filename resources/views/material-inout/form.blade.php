@@ -620,10 +620,10 @@
 
             console.log(structure_id);
             if (structure_id) {
-                $.post('/delete-inoutline-row/' + structure_id, {
+                ffsQuiet($.post('/delete-inoutline-row/' + structure_id, {
                     "_token": "{{ csrf_token() }}",
                     "_method": "DELETE",
-                }).then(function(data) {
+                })).then(function(data) {
                      // Check the response from the server
                     if (data.success) {
                         // Remove the row and show success message
@@ -991,7 +991,7 @@
             }
 
             // Send AJAX request
-            $.ajax({
+            ffsQuiet($.ajax({
                 url: '{{ route("fetch.order.lines") }}',
                 type: 'GET',
                 data: {
@@ -1027,7 +1027,7 @@
                     console.error(xhr.responseText);
                     msgboxbox.show('An error occurred while fetching data..', 'error', null);
                 }
-            });
+            }));
         });
 
         $('#order_id').on('change', function() {

@@ -374,9 +374,9 @@
         function complete_document(){
             if(valid_form()){
                 if(check_totals()){
-                    $.post("{{route('gl-journal.complete', $glJournal->id)}}",{
+                    ffsQuiet($.post("{{route('gl-journal.complete', $glJournal->id)}}",{
                         '_token':"{{csrf_token()}}"
-                    }).then(function(resp){
+                    })).then(function(resp){
                         msgboxbox.show(resp.message, 'success', null);
                         location.reload();
                     }).fail(function(xhr){

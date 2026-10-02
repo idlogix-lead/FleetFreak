@@ -1,5 +1,5 @@
-@extends('errors::minimal')
+@extends('errors.shell')
 
-@section('title', __('Payment Required'))
 @section('code', '402')
-@section('message', __('Payment Required'))
+@section('title', 'This needs a subscription')
+@section('message', 'Your account doesn’t include this feature. Ask your administrator if you need it.')
