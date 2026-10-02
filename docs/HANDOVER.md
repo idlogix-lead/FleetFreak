@@ -402,6 +402,28 @@ Deferred by design:
   raise with the client in Phase 2.
 
 Pre-existing, unrelated to this program (noticed during verification):
+- **Backlog, code quality and security: variable variables built from payload arrays (flagged 2026-10-02).**
+  - `Partner::store_employee` starts with `foreach ($payload as $key => $val) { $$key = $val; }`. The pattern
+    appears 83 times across 29 models, including Order (14), Invoice (9) and Partner (9).
+  - Today every caller builds `$payload` with keys it chooses (`partner_data`, `user_data`, …), and no caller passes
+    `$request->all()` straight in. So it is not exploitable as written, but it is one refactor away: a request key
+    such as `partner`, `company` or `user` would silently overwrite a local variable.
+  - It also hides the data flow: every variable appears from nowhere, and a missing key becomes a confusing
+    "undefined variable" error far from its cause.
+  - Fix: replace each with explicit reads (`$partner_data = $payload['partner_data'];`) or typed method parameters.
+    Do it model by model, with tests.
+- **LIVE BUGS for the mobile apps when they launch. The mobile API partner endpoints read fields their validators
+  don't keep (found 2026-10-02, not fixed).**
+  - The same class of bug as the employee one fixed on 2026-10-02. `validated()` returns only keys that have a
+    rule, and the shared `Partner::store_*` / `update_*` methods read some keys without a default.
+  - `POST /api/update-customer/{partner}` (`Api\CustomerController::api_update`) is missing `prefix_whatsapp` and
+    `prefix_phone`.
+  - `POST /api/create-partner` (`Api\PartnerController::api_store`) fails in every branch:
+    - customer: `prefix_whatsapp`;
+    - business: `prefix_whatsapp`, `source`;
+    - employee: no `actor_id`, and no `call_from_employee_controller` flag.
+  - `POST /api/update-partner/{Partner}` has the same problem in its customer and employee branches.
+  - Check with the app owners whether these endpoints are used before fixing. The web forms are fine.
 - **Recurring fatals on the user's machine**: `storage/logs/laravel.log`
   shows "Cannot redeclare is_active_route() (app/helpers.php)" roughly every
   minute, and earlier "Cannot declare class App\Models\DriverAssignment"
@@ -744,3 +766,32 @@ It's kept on purpose: some components may come back, and restoring one is markup
 - **Repo tests:** `SmokeLoginTest` and `AgentDashboardTest` pass.
 - **Screenshots:** 1440, 1366, 1280, 1152, 1024, 768 and 375px, light and dark, plus the agent view.
   Review page: https://claude.ai/artifact/Vkc2hKBX8P1AA1VDpmX8aF
+
+---
+
+## 8. 2026-10-02: employee create/edit fix and production error pages
+
+### 8.1 Creating or editing an employee failed: fixed
+
+- **Symptom:** `ErrorException: Undefined array key "prefix_whatsapp"` from `Partner::store_employee`, via
+  `EmployeeController::store`.
+- **Cause:** `store_employee` and `update_employee` are shared with drivers. They read 10 driver-only fields with no
+  default:
+  - `prefix_whatsapp`, `prefix_emergency_contact1/2`;
+  - `nic_expiry_date`, `license_country`, `licensee_expiry_date`;
+  - `emergency_contact_no1/2`, `emergency_contact_name`;
+  - `driver_license`.
+
+  The employee form never sends them. The controller also passes `validated()`, which keeps only keys that have a
+  rule.
+- **History:** broken since the first commit (`ff32402`). No version of the employee form had these fields.
+- **Affected:** employee create and edit, on the web (`/employees`) and the mobile API (`/api/create-employee`,
+  `/api/update-employee`). Drivers send every field and are unaffected.
+- **Fix (`app/Models/Partner.php`):**
+  - On create, the 10 fields default to `null`. All are nullable columns; checked in the migrations and on the dev DB.
+  - On edit, they are written only when the request sends them, so an employee edit (or a request that omits one)
+    keeps the stored value.
+  - Drivers behave as before.
+- **Test:** `tests/Feature/EmployeeCreateTest.php` covers create with and without a login, an edit that keeps a stored
+  driver field, and driver fields still being written. It passes.
+- **Related, not fixed:** the mobile API partner endpoints and the `$$key` pattern (§5).
