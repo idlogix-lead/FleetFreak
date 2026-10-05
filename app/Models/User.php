@@ -186,6 +186,37 @@ class User extends AuthenticatableModel
         // return $this;
     }
 
+    /**
+     * The users $actor may manage (docs/HANDOVER.md §9.12). `users` is outside the organization scope, so every
+     * user-management action loads its target through this. A super admin may manage anyone but other super admins.
+     * Anyone else: users of their own client who belong to their active organization and to no organization the actor
+     * isn't in, and who are neither a super admin nor the client's owner.
+     */
+    public function scopeManageableBy($query, User $actor)
+    {
+        $query->where('users.is_super_admin', 0);
+        if ($actor->is_super_admin) {
+            return $query;
+        }
+        if (! $actor->client_id || ! $actor->active_company_id) {
+            return $query->whereRaw('1 = 0');
+        }
+
+        $actorCompanies = $actor->companies()->pluck('companies.id')->all();
+        $ownerId = Client::whereKey($actor->client_id)->value('user_id');
+
+        return $query->where('users.client_id', $actor->client_id)
+            ->when($ownerId, fn ($q) => $q->whereKeyNot($ownerId))
+            ->whereHas('companies', fn ($q) => $q->where('companies.id', $actor->active_company_id))
+            ->whereDoesntHave('companies', fn ($q) => $q->whereNotIn('companies.id', $actorCompanies));
+    }
+
+    /** Agents created with a temporary password must set their own before using the app (AfterAuthentication). */
+    public function mustChangePassword(): bool
+    {
+        return (int) $this->actor_id === 4 && (int) $this->flag === 1;
+    }
+
     // ------------------------------------------------------
     static function store_user($payload){
         foreach($payload as $key => $val){

@@ -17,7 +17,7 @@ class AfterAuthentication
      */
     public function handle(Request $request, Closure $next): Response
     {
-        if (Auth::check() && auth()->user()->actor_id == 4 && auth()->user()->flag == 1) {
+        if (Auth::check() && auth()->user()->mustChangePassword()) {
             // Redirect to the password change page
             if (!$request->is('password/change')) {
                 // Redirect to the password change page if they are not on it

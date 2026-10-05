@@ -95,10 +95,12 @@ _Refreshed 2026-09-24 (end of the Phase 1 follow-up session). Redesign status ad
 - **2026-10-05:** three commits, pushed: "docs: permission and ownership audit" (§9), "Security: delete endpoints
   removed every row in the company, not one" (§8.3), and "Security: agents could read and modify other agents'
   orders" (§9.11, which also fixes the `/agentorders` crash). The working tree is clean after them.
-- **Next (user's priority, 2026-10-05):** the password finding in §9.11: an admin can reset any user's password in
-  any organization. The wider user and role management audit is §9.12, committed as "docs: user management and
-  password audit". Fix plan approved 2026-10-05: commit 1 passwords, commit 2 users and roles. The null-safe `checkGlobal` (§9.10 step 3) and the module ID corrections
-  (step 4) wait until the user says to start them.
+- **2026-10-05, also pushed:** "docs: user management and password audit" (§9.12).
+- **2026-10-05, also pushed:** "Fix: remove stray <?xml ?> declarations from Blade views" (8 inline declarations in
+  7 driver / driver-assignment views; with `short_open_tag` On they were a ParseError on the server) and "Security:
+  password reset restricted to the admin's own organization" (§9.13, commit 1).
+- **Next:** commit 2 of the user-management fixes, users and roles (plan in §9.13). The null-safe `checkGlobal`
+  (§9.10 step 3) and the module ID corrections (step 4) wait until the user says to start them.
 - **Standing rule:** report first; the user checks, then says "commit". Never commit, push, amend, reset or stash
   without that, and a described commit ("it must be its own commit") is not permission. No database writes; tests run
   only on `fleet_freak_testing`.
@@ -471,6 +473,13 @@ Pre-existing, unrelated to this program (noticed during verification):
   - Not fixed, and not this session's call to make: turning "format on save" off for this workspace, or going the
     other way and checking in a `.prettierrc` plus a one-time full-repo reformat, so future diffs stay quiet either
     way. Flag it to whoever owns the editor setup.
+- **Backlog: the admin password reset lives in the wrong controller (noted 2026-10-05).** `PUT /change-password/{id}`
+  is `OrderController@changePassword`, so its RBAC check is Orders/update (module 9): whoever may update orders may
+  reset passwords, and an admin without Orders can't. It belongs with user management, `UserController` under
+  Users/update (module 1). Moving it means registering `changePassword` on the Users module (an additive RBAC
+  migration the user must approve before it runs on the dev DB), repointing the `users.change-password` route, and
+  removing the Orders and AgentOrders registrations. The organization rule (`User::manageableBy`, §9.13) moves with it
+  unchanged.
 - **SECURITY: permission and ownership audit (2026-10-02). See §9 for the full record and the agreed fix order.**
   In short: agents can read, edit and delete other agents' orders; 38 routed methods in `$ignores` that write data
   are open to every logged-in user; external roles have no owner checks; 42 ERP methods reach other companies' rows
@@ -1287,3 +1296,55 @@ organization.
   **Deferred:** the user is focusing on the web app for now (2026-10-05); mobile API items wait.
 - **Also noticed:** `php artisan route:list` crashes: a route points at a missing
   `App\Http\Controllers\RolePermissionTypeController`.
+
+### 9.13 User-management fixes (approved 2026-10-05)
+
+**Decisions (the user's, 2026-10-05):**
+- One rule decides which users a user may manage: `User::scopeManageableBy($actor)`. A super admin may manage anyone
+  but other super admins. Anyone else: users of their own client who belong to their active organization and to no
+  organization the actor isn't in (so one organization's admin can't take over a user's access to another), and who
+  are neither a super admin nor the client's owner. Admins in the same organization may still manage each other.
+- An admin's own password is changed on the profile page (current password required), never through the admin reset.
+- An admin reset revokes the user's API (Sanctum) tokens and logs who reset whom. "Don't touch the mobile apps" means
+  don't change their endpoints or response shapes; invalidating a stale token is what a reset is for.
+- The first-login page is only for agents who must still set their password, and its route name no longer clashes
+  with the forgot-password reset.
+
+**Commit 1, passwords (committed, "Security: password reset restricted to the admin's own organization"):**
+- `User::scopeManageableBy()` and `User::mustChangePassword()` (`actor_id` 4 and `flag` 1, shared with
+  `AfterAuthentication`).
+- `PUT /change-password/{id}` (`OrderController@changePassword`, still gated by Orders/update; moving it to the
+  Users module needs an RBAC migration, so it's backlog): the caller's own id is refused ("use your profile page");
+  the target loads through the rule, else 404; `password` is now `required|min:8|confirmed` (an empty form used to
+  500); the user's API tokens are deleted; one `notice` log line with `actor_id` and `user_id`. The target's web
+  sessions also end on their next request: `AuthenticateSession` is in the `web` group and the password hash changed.
+- `PUT /user-profile/password` (`user-profile.password`, `UserProfileController@updatePassword`): any logged-in user,
+  own account only, `current_password` required, new password confirmed, at least 8 characters, different from the
+  current one. The user stays signed in (`AuthenticateSession` stores the new hash at the end of that request); their
+  other web sessions end. The profile page's form posts here; the shared `user.partials.profile-password` modal shows
+  a "Current Password" field only when the caller passes `current_password`.
+- `/password/change` (`PasswordChangeController`): users who don't have to change their password are sent to the
+  profile page. Its POST is now named `password.change.update`, so `route('password.update')` is the forgot-password
+  reset again (`auth/passwords/reset.blade.php` posts to `/password/reset`). Email reset still needs mail configured.
+  The dead Breeze partial `profile/partials/update-password-form.blade.php` (its `/profile` routes point at a
+  `ProfileController` that `routes/web.php` doesn't import) also uses `password.update`; left alone.
+- Test `tests/Feature/PasswordManagementTest.php`, 8 tests, 42 assertions, all pass (full suite: OK, 54 tests,
+  392 assertions; the own-password test also checks the user is still signed in afterwards): a reset inside the
+  organization works and revokes the token and logs; a user in another client, in a sibling organization, shared with
+  an organization the admin isn't in, and the super admin are all 404 with the password unchanged; another admin
+  can't reset the client owner; an admin's own id is refused; an agent changes their own password (wrong current
+  password and same-as-current are rejected); the first-login page turns away a normal user and still works for a
+  flagged agent; `password.update` is `/password/reset` and the reset form posts there. Against the old code
+  (9 files swapped back temporarily) 7 of 8 fail; the flagged-agent case passes before and after.
+
+**Commit 2, users and roles (planned, not started):**
+- `UserController@update`, `show` and `edit` load the user through `manageableBy` (404 otherwise).
+- `store` and `update` accept only assignable roles: the caller's client's roles, never the super admin role
+  (`actor_id` 1). The create/edit role drop-downs use the same list.
+- `RoleController@update`: 404 for another client's role; only permission rows that belong to the role being edited
+  are written.
+- Tests: an organization A admin can't view or edit a user in organization B or the super admin; the super admin
+  role and another client's role are rejected on create and edit; a forged permission-row id leaves that row
+  unchanged.
+- Not in this work (reported only): delete user (broken), deactivate (no such feature), custom roles holding
+  platform modules, the agent-approval role, `POST /api/register` (web focus).
