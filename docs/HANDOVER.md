@@ -90,8 +90,15 @@ _Refreshed 2026-09-24 (end of the Phase 1 follow-up session). Redesign status ad
     `DashboardController copy 2.php` is deleted; and the format-on-save note is in §5.
 - **2026-10-01:** "Dashboard and app shell: Figma design-only content, header simplified" (§7.7). The working tree is
   clean after it.
-- **2026-10-02:** the employee create/edit fix and the production error pages, committed separately. See §8.
-  Standing rule: never commit, push, amend, reset or stash without being told.
+- **2026-10-02:** `2fe2a9a` (employee create/edit fix) and `37b151b` (production error pages), both pushed to
+  `origin/moeen`. See §8.
+- **2026-10-05:** two commits, pushed: "docs: permission and ownership audit" (§9), then "Security: delete endpoints
+  removed every row in the company, not one" (§8.3). The working tree is clean after them.
+- **Next:** the agent order ownership fix (§9.10 step 2). Its plan is approved, but don't start it until the user
+  says so.
+- **Standing rule:** report first; the user checks, then says "commit". Never commit, push, amend, reset or stash
+  without that, and a described commit ("it must be its own commit") is not permission. No database writes; tests run
+  only on `fleet_freak_testing`.
 - Branch: `moeen`. Commit history before 2026-09-29:
   `ff32402` first commit, `c734f18` bootstrap+docs, `721f238` Phase 0,
   `6e1ab1f` housekeeping, `daf4ac3` Phase 1, `0293bc5` handover,
@@ -461,6 +468,10 @@ Pre-existing, unrelated to this program (noticed during verification):
   - Not fixed, and not this session's call to make: turning "format on save" off for this workspace, or going the
     other way and checking in a `.prettierrc` plus a one-time full-repo reformat, so future diffs stay quiet either
     way. Flag it to whoever owns the editor setup.
+- **SECURITY: permission and ownership audit (2026-10-02). See §9 for the full record and the agreed fix order.**
+  In short: agents can read, edit and delete other agents' orders; 38 routed methods in `$ignores` that write data
+  are open to every logged-in user; external roles have no owner checks; 42 ERP methods reach other companies' rows
+  by ID; `/agentorders` crashes for every agent; the system-role permission screen silently doesn't save.
 
 Behavior changes shipped in Phase 1 (communicate to the client/users):
 - `/ledgers` and the driver-ledger pages now WORK on PostgreSQL (previously
@@ -870,3 +881,273 @@ to set `local` / `true`.
   or an aborted request.
 - **Edited views:** all 39 wrapped calls sit in inline scripts that parse before and after the edit (Node check).
 - **Full suite** (with the employee fix): OK, 34 tests, 267 assertions, on `fleet_freak_testing`.
+
+---
+
+## 9. Permission and ownership audit (2026-10-02)
+
+Found while investigating the `/agentorders` crash. Everything here was established read-only: code, git history,
+SELECT-only queries on the dev DB `fleet_freak` (inside a read-only transaction), `storage/logs/laravel.log` and the
+Laragon Apache access log. **Nothing in this section is fixed unless it says so.** The agreed fix order is §9.10.
+
+### 9.1 How the permission system works (what the findings rely on)
+
+- **`RolePermissions` middleware** (`app/Http/Middleware/RolePermissions.php`). It reads the controller's static
+  `$role_module_id` and the route's method name, then looks for the user's `role_permissions` row whose permission
+  type (`role_permission_types`, per module) lists that method (`role_permission_type_functions`). The role must
+  also hold the module (`role_has_modules`).
+  - Row found and `permission = 1`: allowed.
+  - Row found and `permission = 0`: the type's denial message (`back()` for views, 401 JSON otherwise).
+  - **No row: allowed if the method is in the controller's `$ignores`**, otherwise redirected to `/unauthorized`.
+  - Any exception: `report()` plus 403 JSON or `/unauthorized`.
+  - A controller with no `$role_module_id` is not checked at all.
+- **`scopecheckGlobal($role_module_id)`** (row-level, 9 identical copies). If the role's `global` permission on that
+  module is 0, the query is limited to `created_by = auth()->id()`; if 1, no limit.
+- **`get_user_role_session_permissions()`** doesn't use the session despite its name. It calls
+  `get_user_roles_permissions()`, which queries `role_permissions` fresh on every call. So permission changes apply
+  on the user's next request; no re-login is needed. (The session caching at login is commented out.)
+- **Organization scope** (Phase 1, `BelongsToOrganization`) limits 17 models to the active company: Partner, Vehicle,
+  Order, OrderDetail, Invoice, PaymentHeader, PaymentLine, Account, AccountTransaction, GlJournal, Route, RateList,
+  Location, Activity, VehicleModel, VehicleCompany, VehicleClass.
+
+### 9.2 The `/agentorders` crash: "Attempt to read property "permission" on null"
+
+- **Who:** user 3 `testingagent`, role 3 `agent`. Log references FF-SGDBKEMH2E, FF-PY6CYVANXZ, FF-FG52FSHVCX
+  (2026-10-02 14:38–14:46). The crash is at `Order::scopecheckGlobal`, `app/Models/Order.php:135`.
+- **Cause:** `AgentOrderController` is module 45 (AgentOrders), and the middleware lets the agent in on module 45.
+  But `index()` (lines 61, 77) and `show()` (445) call `checkGlobal(9)`, module 9 (Orders). The agent role doesn't
+  hold module 9, so `role_module_permission_via_action(9, 'global')` returns null and `->permission` crashes. In the
+  code since the first commit (`ff32402`). Every agent hits it, whatever the admin ticks.
+- **Database vs the admin screen: they match.** Role 3 holds modules 12 (Customers), 17 (Ledgers) and 45
+  (AgentOrders). Its 8 AgentOrders rows (read, create, update, delete, import, export, print, global) are all
+  `permission = 1`, written by the seeder on 2026-09-17 17:35 and unchanged since. It has no module 9 rows. The
+  screen (`resources/views/role/form.blade.php`) draws ticks from the same rows and lists only assigned modules, so
+  Orders never appears for this role.
+- **The `global` checkbox** exists on every module and saves like the others, but it can't help here: an unticked
+  `global` is a row with 0, which only filters; the crash needs the row to be missing, and the screen can't add
+  module 9 to this role (system roles can't be saved, §9.9).
+- **Sessions:** not stale; see §9.1. Logged-in users pick up permission changes on their next request.
+
+### 9.3 PRIORITY 1: agents can read, edit, re-status and delete other agents' orders
+
+- **Web, `AgentOrderController` (module 45; the agent role has read, update and delete ticked):**
+  - `edit()` uses `checkGlobal(45)`. The agent role has `global` ticked on 45, so there is no owner filter; only the
+    organization scope applies.
+  - `update()` loads the order with a bare `Order::find($order)` (line 490): no owner check.
+  - `destroy()` checks only the company (line 658).
+  - `show()` would open the same way once its module ID is corrected, so the crash fix needs the owner rule too.
+  - Changing the ID in `/agentorders/{id}/edit` reaches other agents' orders.
+- **Web, order lines:** `OrderController::deleteRow` (`DELETE /delete-route-row/{id}`) is in `$ignores` and runs
+  `OrderDetail::findOrFail($id)->delete()`. Any logged-in user can delete any order line in their company. The agent,
+  admin order, pending-order, tour, daily-rental and rental forms all call it.
+- **Forged fields:** the agent form sends `business_partner_id` in a hidden input (the "Built To" select is
+  `disabled` for non-admins) and `overall_status` in a hidden input set by Save (`draft`) or Submit (`pending`). The
+  server validates them only as `required` and `Order::update_order` saves them as sent. So an agent can put an
+  order in another agent's name, or set their own order to `approved`.
+- **Mobile API, `Api\OrderController` (module 45, the agent app):** `api_show` (`Order::find`), `api_edit`
+  (`checkGlobal(45)`, no owner filter), `api_update` (`Order::find`) and `updateOrderStatus` (in `$ignores`,
+  `Order::find`, any status) have no owner check. `api_store`/`api_update` accept any `business_partner_id` and
+  `overall_status`. `api_destroy` and the controller's own `deleteRow` have no routes.
+- **What "own order" means (decided 2026-10-02): `orders.business_partner_id = users.partner_id`.** The agent's
+  ledger, commission and dashboard all key on it, and an admin can create an order on an agent's behalf; with
+  `created_by` the agent wouldn't see that order.
+  - Today the web and mobile agent order lists filter on `created_by` (`AgentOrderController.php:77`,
+    `Api/OrderController.php:83`). The dashboard, both ledgers and the mobile partner-order endpoints use
+    `business_partner_id`.
+  - Dev data: 2 orders, both `approved`. The agent list hides `pending` and `approved`, so the agent sees 0 rows
+    either way. Order 1 is the admin-on-behalf case (`created_by` 2, `business_partner_id` 3): it shows only under
+    the new rule.
+  - Agents lose nothing by the switch. For agents the "Built To" choice is locked to their own partner
+    (`Partner::BusinessPartnerDropdown`), so an order they created is always theirs; the dev DB has 0 orders that
+    break this. The switch only adds orders an admin created for them.
+
+### 9.4 Deleting one record deleted every row in the company
+
+Fixed in its own commit, "Security: delete endpoints removed every row in the company, not one". Details in §8.3.
+
+### 9.5 `$ignores` lets every logged-in user call 38 methods that write data
+
+- **What `$ignores` really does:** an ignored method is allowed whenever the user's role has no permission row
+  covering it. That is every role that doesn't hold the module, and every role at all if the method isn't
+  registered for the module. Roles that do hold the module, with the method registered, are still checked. It was
+  meant as "skip the check for helper actions"; it works as "open to any logged-in user". For API routes that means
+  any Sanctum token: agents, drivers, vehicle managers, employees, vendors.
+- **Scale:** 101 routed methods are listed in a module controller's `$ignores`. **38 of them write data** (create,
+  update, delete or post accounting entries); 63 only read (same bypass; reads stay within the organization scope
+  where it applies). `NotificationController` has no module, so its 4 routes are unchecked by design and not
+  counted.
+- **Correction (2026-10-05):** the first count said 33. It matched method names: it missed the 9 mobile create
+  endpoints and the mobile vehicle delete (that route line has unusual spacing), and it counted 5 read-only methods
+  (`getallride_assign_to_driver`, `getStatusCount`, `api_vehicle_status`, `role_module_create`,
+  `create_maintainence`). The 38 below come from reading each method body.
+- **Web (13):**
+  - `RoleController@role_module_update`, `POST /roles/module/update/{role_id}`: replaces any non-system role's
+    module list. System roles are refused; there is no client check.
+  - `AgentPaymentController@update_status`, `POST /payments_update/{id}`: changes a payment's status and posts
+    accounting entries.
+  - `BulkPaymentController@payment_window_update`, `POST /payment_window/{id}/update`: updates a payment window and
+    posts accounting entries.
+  - `CustomerController@create_customer_from_order`, `POST /customer/modal/create`: creates a customer.
+  - `DriverAssignmentController@assignVehicle`, `POST /driver_assignments/assign_vehicle`; and
+    `@incompleteRidesUpdate`, `POST /driver_assignments/incomplete_rides`: dispatch writes.
+  - `OrderController@deleteRow`, `DELETE /delete-route-row/{id}`: deletes an order line (§9.3).
+  - Line deletes with no company check, so they reach other companies' rows:
+    `ActivityController@deleteActivityRow` (`/delete-activity-row/{id}`, activity lines),
+    `InventoryMoveController@deleteActivityRow` (`/delete-movement_line-row/{id}`, movement lines),
+    `PhysicalInventoryController@deleteRow` (`/delete-phy_inv_line-row/{id}`, movement lines),
+    `PriceListController@deleteActivityRow` (`/delete-version-row/{id}`, price list versions),
+    `ProductController@deleteActivityRow` (`/delete-product_price-row/{id}`, product prices).
+  - `PurchaseOrderController@deleteActivityRow`, `/delete-poline-row/{id}` and `/delete-inoutline-row/{id}`: order
+    lines, limited to the user's company by the organization scope.
+- **Mobile API (25):**
+  - Vehicles: `api_store` (`POST /api/create-vehicle`), `api_update` (`POST /api/update-vehicle/{vehicle}`),
+    `api_destroy` (`DELETE /api/delete-vehicle/{id}`).
+  - Routes: `api_store` (`POST /api/route/create`), `api_update` (`POST /api/route/update/{route}`), `api_destroy`
+    (`DELETE /api/route/delete/{id}`).
+  - Rate lists: `api_store` (`POST /api/create-ratelist`), `api_update` (`POST /api/update-ratelist/{ratelist}`),
+    `api_destroy` (`DELETE /api/ratelist/delete/{id}`).
+  - Locations: `api_store` (`POST /api/create-locations`), `api_update` (`POST /api/update-locations/{locations}`),
+    `api_destroy` (`DELETE /api/locations/delete/{id}`).
+  - Toll tax: `api_store` (`POST /api/store-toll-tax`), `api_update` (`PUT /api/update-toll-tax/{id}`),
+    `api_destroy` (`DELETE /api/delete-toll-tax/{id}`).
+  - Partners and employees: `Api\PartnerController@api_store` (`POST /api/create-partner`) and `@api_update`
+    (`POST /api/update-partner/{Partner}`); `Api\EmployeeController@api_store` (`POST /api/create-employee`) and
+    `@api_update` (`POST /api/update-employee/{partner}`).
+  - Vehicle reference data: `Api\VehicleClassController@api_store` (`POST /api/store-vehicle-class`),
+    `Api\VehicleCompanyController@api_store` (`POST /api/store/vehicle/company`),
+    `Api\VehicleModelController@api_store_vehicle_model` (`POST /api/create-vehicle-model`).
+  - Dispatch: `Api\DriverAssignmentController@api_vehicle_assign` (`POST /api/vehicle-assign`) and
+    `@updateRideStatus` (`POST /api/ride-status-update-driver`). `updateRideStatus` checks the ride's driver itself
+    (only rides assigned to the caller's partner), so the bypass there is harmless.
+  - Orders: `Api\OrderController@updateOrderStatus` (`POST /api/order/updatestatus/{id}`), §9.3 and §9.9.
+- **Fixing it changes behaviour for the mobile apps** (methods they may rely on would start needing permissions), so
+  it ties into the 13 unregistered mobile API actions in §5. Plan it as its own item after §9.10 steps 1–5; don't
+  fold it into another change.
+
+### 9.6 No owner checks for external roles
+
+- Every non-admin role has `global` ticked on every module it holds (seed data), and all 8 seeded roles are system
+  roles that can't be edited (§9.9). So `checkGlobal` restricts nobody today.
+- Modules held by external roles (dev DB, 2026-10-02): agent: Customers, Ledgers, AgentOrders. Driver: Customers,
+  DriverAssignment, Ledgers, Maintenance, Inspection. Management and office_staff: Customers, Ledgers. Vehicle
+  manager: Vehicle, VehicleClass, VehicleModel, VehicleCompany, Maintenance, Calendar, Inspection. Vendor: none.
+  Every action is ticked on all of them.
+- **Effect:** these roles can edit or delete any record in their company in those modules:
+  - Customers: agents and drivers can change or delete other agents' customers (`CustomerController@update` and
+    `destroy` check only the company). The mobile `Api\CustomerController@api_update` also sets the customer's
+    `business_partner_id` to the caller, moving the customer to them.
+  - DriverAssignment, Maintenance, Inspection: no owner check on edit, update or destroy.
+  - Vehicle: vehicle managers aren't limited to their `vehicle_managers` rows.
+- Each module needs its own "own" rule, decided the way §9.3 decided it for orders.
+
+### 9.7 Cross-company access on tables outside the organization scope
+
+- 42 show/edit/update/destroy methods load a record by ID with no company check, on 18 models whose tables have
+  `company_id` but aren't in the organization scope:
+  - all four methods: ProductPrice, Locator, ProductCategory, ProductSubCategory, ProductType, AccountType;
+  - destroy, edit, show: PartnerLocation;
+  - destroy, update: WareHouse, StockStorage, Brand, ManufacturingCompany;
+  - update: UnitMeasure, PriceList, Product, MaterialInout, InventoryMove, InventoryConsumption, BroadcastMessage.
+- Only admins hold these modules today, so the exposure is an admin of one organization reaching another
+  organization's rows by ID. This puts a number on the cost of the §3 item 3 deferral.
+- 14 more methods are on 6 models whose tables don't exist in the dev DB (PhysicalInventory, Tax, ProductCosting,
+  M_MatchPo, Sale, ServiceProvider), so those pages can't work at all today. Check them against the migrations
+  when each module is touched. 5 methods are on tables with no company column (InvoiceDocumentType, Blog): shared
+  data by design.
+- The ignored line deletes in §9.5 (activity lines, movement lines, price list versions, product prices) reach other
+  organizations' rows for any logged-in user, not just admins.
+
+### 9.8 `scopecheckGlobal` crashes on a missing permission row; wrong module IDs
+
+- All 9 copies (Actor, Order, Partner, RateList, Role, RoleModule, Route, User, Vehicle) read `->permission` on the
+  result without a null check.
+- 13 `Order` call sites pass a module that isn't their controller's own:
+
+  | Controller (own module) | Passes | Methods | Today |
+  |---|---|---|---|
+  | AgentOrderController (45) | 9 | index, show | crashes for every agent |
+  | TourServiceController (43) | 9 | index, show, edit | no crash |
+  | DailyRentalController (42) | 9 | index, show, edit | no crash |
+  | RentalVehicleController (41) | 9 | show, edit | no crash |
+  | VendorController export (67) | 13, via `AgentExport` | export | no crash; downloads agents (§9.9) |
+
+  The "no crash" rows survive only because the admin is the only role holding those modules and also holds Orders
+  (and BusinessAgent). Their own module's `global` tick has no effect; the Orders tick decides. Correcting the IDs
+  changes nothing for the admin today: role 2 has `global` ticked on all of them.
+- Every other call site passes its own module. All 88 role-module assignments in the dev DB have a `global` row,
+  so nothing else crashes today. **Remaining risk:** a permission type added to a module later has no row for
+  existing roles until they're re-saved, and every page in that module would crash.
+- **Agreed fallback:** a missing row is treated like an unticked `global`: the user sees only rows they created.
+  They never lose access and never gain any; the middleware has already decided they may open the page. Log a
+  warning naming the user, role and module so a misconfiguration shows up. Write it once, shared by all 9 models.
+- **Show pages need the 404 page** when the record isn't found: `agent-order/show.blade.php` and others use
+  `$order->...` directly and would crash in the view instead.
+
+### 9.9 Other findings
+
+- **The vendor export downloads agents.** `VendorController@export` uses `AgentExport` (`agents.xlsx`, a module 13
+  check). It needs its own export class and module.
+- **System roles show editable checkboxes that silently don't save.** `RoleController@update` and
+  `role_module_update` refuse `is_system = 1` roles with "System Roles are not editable", and all 8 seeded roles are
+  system roles. But the edit screen still shows every checkbox and a Save button. An admin believes they granted a
+  permission and nothing changed; the page reloads showing the stored state. Make the screen read-only for system
+  roles (with a note saying why), or allow editing them. Not fixed; report only.
+- **Performance backlog:** the permission query in §9.1 runs several times per request (the middleware, each
+  `checkGlobal`, the sidebar), each time with eager loads. Memoize it per request. Not fixed; report only.
+- **Who calls `POST /api/order/updatestatus/{id}`: only the agent flow** (checked 2026-10-02):
+  - The driver app updates rides through `POST /api/ride-status-update-driver` (`updateRideStatus`, module 14, which
+    the driver role holds). The one driver status call in the access log is the user's test on 25 Sep (200).
+  - Nothing in the repo calls `/api/order/updatestatus`, and the access log (Aug 2024 to 2 Oct 2026) has never
+    recorded a request to it. It lives in the agent API controller (module 45); the driver role doesn't hold that
+    module and only gets in through `$ignores`.
+  - The admin app has its own `/api/admin-order/updatestatus/{id}` (`AdminOrderController`, module 9). That's where
+    the `updateOrderStatus` permission registration (module 9) actually belongs.
+  - `updateRideStatus` never sets the order to `completed`: the line has been commented out since the first commit
+    (`Api/DriverAssignmentController.php:793`). The driver lists filter on the ride's status, and the admin's
+    completed-rides list expects the order to stay `approved`.
+  - Caveat: the mobile apps' code isn't in this repo and the log only shows local traffic. Strong evidence, not
+    proof.
+
+### 9.10 Agreed fix order and decisions (2026-10-02)
+
+**Decisions:**
+- "Own order" for agents = `business_partner_id = users.partner_id` (§9.3).
+- Agents may set only `draft` or `pending` through order create/update, web and mobile.
+- `POST /api/order/updatestatus/{id}`: admins can set any order; agents only their own orders, and only to `draft`,
+  `pending` or `cancelled`; every other role gets 403. Restrict it as planned, since it's agent-only (§9.9).
+- The delete-all fix is part of this work but is its own commit, first.
+- Every step: build, test on `fleet_freak_testing`, report, and wait for the user to say "commit".
+
+**Order:**
+1. **Delete-all fix** (§8.3). Done and committed on its own.
+2. **Agent order ownership** (§9.3). Plan approved, not started; waits for the user's go-ahead:
+   - Web `AgentOrderController`: `show`, `edit`, `update` and `destroy` load through the ownership rule, and another
+     agent's order is a 404 (not 403, so the ID's existence isn't confirmed). The `index` agent branch switches
+     from `created_by` to the rule. `index` and `show` move from `checkGlobal(9)` to module 45, which fixes the
+     `/agentorders` crash.
+   - For agents, `store` and `update` ignore the posted `business_partner_id` (always their own) and accept only
+     `draft` or `pending`.
+   - `OrderController::deleteRow`: for agents, the line's order must pass the rule, or 404. Admins unchanged.
+   - Mobile `Api\OrderController`: `api_index` uses the rule; `api_show`, `api_edit`, `api_update` and
+     `updateOrderStatus` load through it (404 JSON); `api_store`/`api_update` get the same field enforcement;
+     `updateOrderStatus` gets the role rules above. The unrouted `api_destroy` and `deleteRow` are left alone.
+   - Test, `tests/Feature/AgentOrderOwnershipTest.php`: two agents in one company, each with an order and a line,
+     plus an admin-created order for agent A.
+     - A on B's order: show, edit, update and destroy are 404 with B's order unchanged; deleting B's line is 404
+       with the line kept.
+     - A on A's own order: edit, update and destroy work.
+     - A posts B's `business_partner_id` and `overall_status=approved`: saved as A's, status `pending`.
+     - A's list shows the admin-created order for A and not B's.
+     - Mobile, as A on B's order: show, edit, update and updatestatus are 404, order unchanged; on A's own order
+       they work; status rules enforced; a non-agent, non-admin role gets 403.
+     - The admin is unaffected, including deleting lines on any order.
+3. **Null-safe `checkGlobal`** with the warning log, shared by all 9 models (§9.8).
+4. **Module ID corrections** for TourService, DailyRental and RentalVehicle, and the 404 page for missing records
+   (§9.8).
+5. **Vendor export** gets its own export class and module (§9.9).
+
+**Not scheduled yet; each needs its own plan and the user's approval:**
+- The `$ignores` bypass (§9.5): changes mobile behaviour; ties into the 13 unregistered mobile API actions (§5).
+- Owner rules for the other external-role modules (§9.6).
+- Organization scoping for the ERP tables (§9.7, §3 item 3).
+- The system-role permission screen and the permission query memoization (§9.9).
