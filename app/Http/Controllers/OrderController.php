@@ -682,6 +682,13 @@ class OrderController extends Controller
     }
     public function deleteRow($id)
     {
+        // Shared by every order form, the agent's included: an agent may only remove lines from their own orders
+        // (docs/HANDOVER.md §9.3). Other users are unchanged.
+        $user = auth()->user();
+        if (Order::isAgent($user) && ! OrderDetail::whereKey($id)->whereHas('order', fn ($q) => $q->accessibleBy($user))->exists()) {
+            return response()->json(['error' => 'Row not found'], 404);
+        }
+
         try {
             // Find the row by ID and delete it
             $order_detail = OrderDetail::findOrFail($id);

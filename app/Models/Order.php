@@ -137,6 +137,54 @@ class Order extends BaseModel
         });
         // return $this;
     }
+
+    // Agent order ownership (docs/HANDOVER.md §9.3): an agent owns the orders whose business_partner_id is
+    // their partner, including orders an admin created on their behalf.
+
+    /** Statuses an agent may give an order through create or update. */
+    public const AGENT_SAVE_STATUSES = ['draft', 'pending'];
+
+    /** Statuses an agent may set through the mobile status endpoint. */
+    public const AGENT_STATUS_CHANGES = ['draft', 'pending', 'cancelled'];
+
+    public static function isAgent(?User $user): bool
+    {
+        return $user !== null && (int) $user->actor_id === 4;
+    }
+
+    /**
+     * Limits an agent to their own orders. Every other user is unaffected; the organization scope still applies.
+     * An agent with no partner owns nothing.
+     */
+    public function scopeAccessibleBy($query, ?User $user)
+    {
+        if (! self::isAgent($user)) {
+            return $query;
+        }
+
+        return $user->partner_id
+            ? $query->where($this->getTable() . '.business_partner_id', $user->partner_id)
+            : $query->whereRaw('1 = 0');
+    }
+
+    /**
+     * An agent's create or update: the order is always theirs, and its status is draft or pending (anything else
+     * becomes pending), whatever the request sent. Other users' data is returned unchanged.
+     */
+    public static function applyAgentRules(array $orderData, ?User $user): array
+    {
+        if (! self::isAgent($user)) {
+            return $orderData;
+        }
+
+        $orderData['business_partner_id'] = $user->partner_id;
+        if (! in_array($orderData['overall_status'] ?? null, self::AGENT_SAVE_STATUSES, true)) {
+            $orderData['overall_status'] = 'pending';
+        }
+
+        return $orderData;
+    }
+
     public static function totalOrders()
     {
         return self::where('overall_status', 'approved')->orWhere('overall_status', 'pending')->count();

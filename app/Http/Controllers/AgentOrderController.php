@@ -58,7 +58,7 @@ class AgentOrderController extends Controller
             $orders = Order::when($companyId, function ($query) use ($companyId) {
                 return $query->where('company_id', $companyId);
             })
-                ->checkGlobal(9)->whereNotIn('overall_status', ['pending', 'approved'])
+                ->checkGlobal(self::$role_module_id)->whereNotIn('overall_status', ['pending', 'approved'])
                 ->when($query, function ($q) use ($query) {
                     $q->where(function ($q) use ($query) {
                         $q->where('order_no', 'ILIKE', '%' . $query . '%')
@@ -73,8 +73,12 @@ class AgentOrderController extends Controller
                 })->orderBy('created_at', 'desc')->paginate($perPage);
 
         } else {
+            // Agents see the orders that are theirs (business_partner_id), including ones an admin created for them.
+            $user = auth()->user();
             $orders = Order::where('company_id', $companyId)
-                ->checkGlobal(9)->where('overall_status', '!=', 'pending')->where('overall_status', '!=', 'approved')->where('created_by', auth()->user()->id)->when($query, function ($q) use ($query) {
+                ->checkGlobal(self::$role_module_id)->where('overall_status', '!=', 'pending')->where('overall_status', '!=', 'approved')
+                ->when(Order::isAgent($user), fn ($q) => $q->accessibleBy($user), fn ($q) => $q->where('created_by', $user->id))
+                ->when($query, function ($q) use ($query) {
                 $q->where(function ($q) use ($query) {
                     $q->where('order_no', 'ILIKE', '%' . $query . '%')
                         ->orWhere('overall_status', 'ILIKE', '%' . $query . '%')
@@ -331,7 +335,7 @@ class AgentOrderController extends Controller
             // return back()->with('errors', $order_validator->errors());
         }
         // Update lead attributes with validated data
-        $order_data = $order_validator->validated();
+        $order_data = Order::applyAgentRules($order_validator->validated(), auth()->user());
         $order_data['created_by'] = auth()->user()->id;
         if ($order_data['overall_status'] == 'draft') {
             $order_data['status'] = 'draft';
@@ -442,7 +446,7 @@ class AgentOrderController extends Controller
                 'active' => true,
             ],
         ];
-        $order = Order::checkGlobal(9)->where('company_id', auth()->user()->active_company())->find($id);
+        $order = $this->findOrder($id);
 
         return view('agent-order.show', compact('order', 'breadcrumbs'));
     }
@@ -467,7 +471,7 @@ class AgentOrderController extends Controller
                 'active' => true,
             ],
         ];
-        $order = Order::checkGlobal(45)->where('company_id', auth()->user()->active_company())->find($id);
+        $order = $this->findOrder($id);
 
         // dd($order);
         // $business_partner = Partner::where('partner_type','business')->get();
@@ -487,7 +491,7 @@ class AgentOrderController extends Controller
     {
         // dd('update');
         $payload = [];
-        $order = Order::find($order);
+        $order = $this->findOrder($order);
         // dd($order);
         // Validate the request data
         // dd($request);
@@ -599,7 +603,7 @@ class AgentOrderController extends Controller
             return back()->with('errors', $order_validator->errors());
         }
         // Update lead attributes with validated data
-        $order_data = $order_validator->validated();
+        $order_data = Order::applyAgentRules($order_validator->validated(), auth()->user());
         $order_data['updated_by'] = auth()->user()->id;
         if ($order_data['overall_status'] == 'draft') {
             $order_data['status'] = 'draft';
@@ -655,10 +659,23 @@ class AgentOrderController extends Controller
      */
     public function destroy($id)
     {
-        $order = Order::where('company_id', auth()->user()->active_company())->find($id)->delete();
+        $order = $this->findOrder($id)->delete();
 
         return redirect()->route('agentorders.index')
             ->with('success', 'Order deleted successfully');
+    }
+
+    /**
+     * The order behind show/edit/update/destroy: the user's company, this module's global rule, and for an agent
+     * only their own orders (docs/HANDOVER.md §9.3). Anything else is a 404, so another agent's order id isn't
+     * confirmed.
+     */
+    private function findOrder($id): Order
+    {
+        return Order::checkGlobal(self::$role_module_id)
+            ->accessibleBy(auth()->user())
+            ->where('company_id', auth()->user()->active_company())
+            ->findOrFail($id);
     }
     public function deleteRow($id)
     {

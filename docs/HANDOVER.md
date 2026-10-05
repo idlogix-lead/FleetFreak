@@ -92,10 +92,12 @@ _Refreshed 2026-09-24 (end of the Phase 1 follow-up session). Redesign status ad
   clean after it.
 - **2026-10-02:** `2fe2a9a` (employee create/edit fix) and `37b151b` (production error pages), both pushed to
   `origin/moeen`. See §8.
-- **2026-10-05:** two commits, pushed: "docs: permission and ownership audit" (§9), then "Security: delete endpoints
-  removed every row in the company, not one" (§8.3). The working tree is clean after them.
-- **Next:** the agent order ownership fix (§9.10 step 2). Its plan is approved, but don't start it until the user
-  says so.
+- **2026-10-05:** three commits, pushed: "docs: permission and ownership audit" (§9), "Security: delete endpoints
+  removed every row in the company, not one" (§8.3), and "Security: agents could read and modify other agents'
+  orders" (§9.11, which also fixes the `/agentorders` crash). The working tree is clean after them.
+- **Next (user's priority, 2026-10-05):** the password finding in §9.11: an admin can reset any user's password in
+  any organization. Plan first, then code. The null-safe `checkGlobal` (§9.10 step 3) and the module ID corrections
+  (step 4) wait until the user says to start them.
 - **Standing rule:** report first; the user checks, then says "commit". Never commit, push, amend, reset or stash
   without that, and a described commit ("it must be its own commit") is not permission. No database writes; tests run
   only on `fleet_freak_testing`.
@@ -1146,7 +1148,7 @@ Fixed in its own commit, "Security: delete endpoints removed every row in the co
 
 **Order:**
 1. **Delete-all fix** (§8.3). Done and committed on its own.
-2. **Agent order ownership** (§9.3). Plan approved, not started; waits for the user's go-ahead:
+2. **Agent order ownership** (§9.3). Done and committed; what changed is in §9.11. The plan was:
    - Web `AgentOrderController`: `show`, `edit`, `update` and `destroy` load through the ownership rule, and another
      agent's order is a 404 (not 403, so the ID's existence isn't confirmed). The `index` agent branch switches
      from `created_by` to the rule. `index` and `show` move from `checkGlobal(9)` to module 45, which fixes the
@@ -1177,3 +1179,61 @@ Fixed in its own commit, "Security: delete endpoints removed every row in the co
 - Owner rules for the other external-role modules (§9.6).
 - Organization scoping for the ERP tables (§9.7, §3 item 3).
 - The system-role permission screen and the permission query memoization (§9.9).
+
+### 9.11 Agent order ownership (§9.10 step 2): what changed (2026-10-05)
+
+**The rule, defined once on `App\Models\Order`:**
+- `Order::isAgent($user)`: `actor_id` 4.
+- `scopeAccessibleBy($user)`: limits an agent to `business_partner_id = users.partner_id` (an agent with no partner
+  sees nothing); every other user is unchanged, and the organization scope still applies.
+- `Order::applyAgentRules($orderData, $user)`: for an agent, forces `business_partner_id` to their partner and turns
+  any `overall_status` other than `draft` or `pending` into `pending`. Other users' data is untouched.
+
+**Web:**
+- `AgentOrderController`: `show`, `edit`, `update` and `destroy` load through one private `findOrder()`: the
+  user's company, `checkGlobal(45)` and the rule, else 404. `index` uses module 45 in both branches (it used 9,
+  which crashed for every agent), and its agent branch filters by the rule instead of `created_by`; non-agents keep
+  `created_by`. `store` and `update` apply the field rules.
+- `OrderController::deleteRow` (`DELETE /delete-route-row/{id}`, shared by every order form): an agent gets a 404
+  JSON unless the line's order is theirs. Everyone else is unchanged.
+
+**Mobile API (`Api\OrderController`):**
+- `api_index` filters agents by the rule (non-agents keep `created_by`).
+- `api_show`, `api_edit` and `api_update` load through the rule; a missing order is now a 404 JSON
+  (`{"message": "Order not found"}`) where `api_show`/`api_edit` used to return 200 with `order: null`.
+- `api_store` and `api_update` apply the field rules, on the draft path too.
+- `updateOrderStatus`: admins (`actor_id` 2) may set any order in their organization; agents only their own, and
+  only to `draft`, `pending` or `cancelled` (otherwise 422); every other user gets 403, the super admin (`actor_id` 1)
+  included. Nothing suggests the super admin uses this mobile endpoint; say so if that's wrong.
+
+**Test:** `tests/Feature/AgentOrderOwnershipTest.php`, 8 tests, 64 assertions, all pass. Two agents in one company,
+each with a draft cargo order and a line, plus a cancelled order an admin created for agent A.
+- Agent A on B's order, web: show, edit, update, destroy and the line delete are all 404; B's order, status, owner,
+  amount and line are unchanged.
+- Agent A on A's own order, web: show and edit open; the line delete works; update saves; destroy works on an order
+  with no lines (see below).
+- Forged `business_partner_id` (B's) and `overall_status=approved` on web create and update: saved as A's, `pending`.
+- A's web list holds exactly A's order and the admin-created order for A.
+- Mobile, A on B's order: show, edit, update and updatestatus are 404, B unchanged. On A's own: show, edit and the
+  list work; forged owner and status on update and create are saved as A's, `pending`; updatestatus to `cancelled`
+  works and to `approved` is a 422 with the status unchanged.
+- updatestatus as a driver: 403, unchanged. As an admin: works on any order.
+- An admin can still delete lines on any order.
+- **Against the old code** (the four files swapped back temporarily, then restored), 7 of the 8 fail: web create
+  saved the order under B's partner; the mobile app showed B's order to A; a driver changed an order's status; the
+  web list and show pages crashed. The eighth (admin line delete) was already correct.
+
+**Found while doing it (pre-existing, not fixed):**
+- **An order that still has lines can't be deleted by anyone.** `order_lines.order_id` is a `NO ACTION` foreign key
+  and neither `AgentOrderController::destroy` nor `OrderController::destroy` removes the lines first, so the delete
+  fails with a foreign-key violation (500). Confirmed with a throwaway test on `fleet_freak_testing` (2026-10-05).
+  Since every real order has lines, the order delete button never works. `OrderController::destroy` also crashes
+  on an unknown id (`find()->delete()` on null).
+- **An admin can reset any user's password in any organization.** `PUT /change-password/{id}`
+  (`OrderController@changePassword`, module 9, used by the user, customer, driver, employee, vendor, agent and
+  profile screens) runs `User::findOrFail($id)` with no company or role check, and `User` isn't organization-scoped.
+  An admin of one organization can set the password of another organization's users, the super admin included.
+  Non-admin roles can't use it at all, even for their own password from the profile page (they don't hold Orders).
+- **Mobile order create/update can file a new customer under another agent.** When no `customer_partner_id` is sent,
+  `api_store`/`api_update` create the customer with `business_partner_id` taken from the request's
+  `customer_business_partner_id`. Belongs with the customer ownership rule (§9.6).
