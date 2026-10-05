@@ -96,7 +96,8 @@ _Refreshed 2026-09-24 (end of the Phase 1 follow-up session). Redesign status ad
   removed every row in the company, not one" (§8.3), and "Security: agents could read and modify other agents'
   orders" (§9.11, which also fixes the `/agentorders` crash). The working tree is clean after them.
 - **Next (user's priority, 2026-10-05):** the password finding in §9.11: an admin can reset any user's password in
-  any organization. Plan first, then code. The null-safe `checkGlobal` (§9.10 step 3) and the module ID corrections
+  any organization. The wider user and role management audit is §9.12, committed as "docs: user management and
+  password audit". Fix plan approved 2026-10-05: commit 1 passwords, commit 2 users and roles. The null-safe `checkGlobal` (§9.10 step 3) and the module ID corrections
   (step 4) wait until the user says to start them.
 - **Standing rule:** report first; the user checks, then says "commit". Never commit, push, amend, reset or stash
   without that, and a described commit ("it must be its own commit") is not permission. No database writes; tests run
@@ -1237,3 +1238,52 @@ each with a draft cargo order and a line, plus a cancelled order an admin create
 - **Mobile order create/update can file a new customer under another agent.** When no `customer_partner_id` is sent,
   `api_store`/`api_update` create the customer with `business_partner_id` taken from the request's
   `customer_business_partner_id`. Belongs with the customer ownership rule (§9.6).
+
+### 9.12 User and role management audit (2026-10-05, read-only, not fixed)
+
+Prompted by the password finding in §9.11. `users` is deliberately outside the organization scope (§3 item 3: it is
+the access model), so every user-management action has to check membership itself. Tenancy: a client
+(`clients`, owner `clients.user_id`) has organizations (`companies`); users join organizations through
+`user_companies`. The super admin (`is_super_admin = 1`, role 1 "Supper Admin", `actor_id` 1) has no client and no
+organization.
+
+- **Password reset, `PUT /change-password/{id}`** (`OrderController@changePassword`, gated by Orders/update):
+  `User::findOrFail($id)`, no organization, client or role check. An admin can set any user's password in any
+  organization, including the super admin's. Existing sessions and API tokens of the target stay valid.
+- **Own password:** the profile page's form posts to the same route, so only roles holding Orders can change their
+  own password there. `/password/change` (the agents' first-login page, `PasswordChangeController`) changes the
+  caller's own password with no current-password check, and any logged-in user can reach it. The mobile
+  `POST /api/change-password` is correct (own account, old password required).
+- **`password.update` name collision:** `Auth::routes()` names the password-reset POST `password.update`;
+  `routes/web.php` reuses the name for `/password/change`, so the forgot-password form
+  (`auth/passwords/reset.blade.php`) posts to the logged-in change page. Email password reset can't work today.
+- **Edit user, `PUT /users/{id}`** (`UserController@update`): route-model binding loads any user, no organization or
+  client check (`edit()` checks both; `update()` doesn't). An admin can change any user's name, email and role,
+  the super admin's included. `role_id` isn't validated, so it can be any role: another client's, or role 1. Setting
+  role 1 gives its platform modules (RoleModules, Actors, AccountTypes, InvoiceDocumentType), including to the
+  admin themselves. The update also clears the user's image when none is uploaded.
+- **Create user, `POST /users`** (`UserController@store`): `role_id` is only `required`. The form lists the client's
+  roles, but the server accepts role 1 (the new user then gets `actor_id` 1 and the super admin dashboard) or
+  another client's role.
+- **Show user** checks the client but not the organization: users of a sibling organization in the same client are
+  visible. The edit form's role list holds every client's roles (except role 1).
+- **Delete user** (`UserController@destroy`) is broken: it looks the user up with `where('id', <the caller's own
+  id>)`, so deleting anyone else is a 500 (null `->delete()`), and only self-deletion goes through. Hard delete.
+- **Deactivate:** no such feature. `users` has no active/status column.
+- **Role permissions, `PATCH /roles/{id}`** (`RoleController@update`): route-model binding, only system roles are
+  refused, no client check. Worse, it writes `RolePermission::where('id', $posted_permission_id)` without checking
+  the row belongs to the role being edited. An admin who edits any custom role of theirs can switch any permission
+  row in the system on or off: system roles, the super admin role, other clients' roles. This bypasses "System
+  Roles are not editable". (`role_module_update` in §9.5 is the same problem for module lists.)
+- **Custom roles can hold platform modules:** `RoleController@store` accepts any existing module id, including
+  RoleModules and Actors, so an admin can build a role with platform-wide powers and assign it.
+- **Agent approval** (`UnapprovedAgentController@update`) creates the login with `role_id` 4 hard-coded: role 4 is
+  `driver` in the dev DB, not `agent`. The new user has no client, no active organization and no membership, so
+  `AfterAuthentication` sends them to company registration. By code reading; not exercised.
+- **Public self-registration, `POST /api/register`** (`Api\LoginController@register`, no auth): anyone can create a
+  user with no role, client or organization and receive an API token. With it, every `$ignores` API method lets
+  them through (§9.5). Reads of organization-scoped models fail closed (no active organization), but creating
+  records doesn't pass through the read scope, so what that token can write needs checking. Not exercised.
+  **Deferred:** the user is focusing on the web app for now (2026-10-05); mobile API items wait.
+- **Also noticed:** `php artisan route:list` crashes: a route points at a missing
+  `App\Http\Controllers\RolePermissionTypeController`.
