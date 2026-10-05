@@ -786,7 +786,7 @@ It's kept on purpose: some components may come back, and restoring one is markup
 
 ---
 
-## 8. 2026-10-02: employee create/edit fix and production error pages
+## 8. 2026-10-02: employee create/edit fix, production error pages, delete-one-row fix
 
 ### 8.1 Creating or editing an employee failed: fixed
 
@@ -881,6 +881,32 @@ to set `local` / `true`.
   or an aborted request.
 - **Edited views:** all 39 wrapped calls sit in inline scripts that parse before and after the edit (Node check).
 - **Full suite** (with the employee fix): OK, 34 tests, 267 assertions, on `fleet_freak_testing`.
+
+### 8.3 Deleting one record deleted every row in the company: fixed
+
+- **Bug:** five delete methods ran `Model::find($id)->where('company_id', ...)->delete()`. Calling `where()` on a
+  loaded model starts a new query without the id (`Model::__call` forwards to `newQuery()`), so the delete targeted
+  every row of that table in the company.
+- **Sites:**
+  - `EmployeeController::destroy` (web; the partners table holds customers, agents, drivers and employees);
+  - `Api\VehicleController::api_destroy` (`DELETE /api/delete-vehicle/{id}`);
+  - `Api\RouteController::api_destroy` (`DELETE /api/route/delete/{id}`);
+  - `Api\RateListController::api_destroy` (`DELETE /api/ratelist/delete/{id}`);
+  - `Api\DriverAssignmentController::api_destroy` (no route).
+- **Effect:** hard deletes (no `deleted_at`), and every foreign key to these tables is `NO ACTION`, so each delete was
+  all-or-nothing. In a company where any row was referenced it failed (500, nothing deleted); where none was, the
+  whole table for that company went. The new test reproduced both against the old code: the employee and route
+  deletes returned 500, and the vehicle and rate-list deletes also removed the other row.
+- **Fix:** `Model::where('company_id', ...)->findOrFail($id)->delete()`. Exactly one row; an unknown id, or another
+  company's, is a 404 (it used to crash on null).
+- **Test:** `tests/Feature/DeleteOneRecordTest.php`. For each routed endpoint it deletes one of two new rows and
+  checks that the other remains, that the table count drops by exactly one, and that an unknown id is a 404.
+  - With the fix: 4 tests, 20 assertions, all pass.
+  - Against the old code (controllers swapped back temporarily, then restored): all 4 fail.
+  - Full suite with the fix: OK, 38 tests, 287 assertions, on `fleet_freak_testing`.
+- **Still open** (part of the `$ignores` problem, §9.5): the vehicle, route and rate-list API deletes are in their
+  controllers' `$ignores`, so any logged-in API user can call them, now one row at a time.
+- **Committed on its own** so it can be reviewed and reverted separately (the user's decision).
 
 ---
 

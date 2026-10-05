@@ -333,7 +333,7 @@ class DriverAssignmentController extends Controller
      */
     public function api_destroy($id)
     {
-        $order = Order::find($id)->where('company_id', auth()->user()->active_company())->delete();
+        $order = Order::where('company_id', auth()->user()->active_company())->findOrFail($id)->delete();
 
         return redirect()->route('driver_assignments.index')
             ->with('success', 'Order deleted successfully');
