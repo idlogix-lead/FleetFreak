@@ -3,7 +3,7 @@
     @if(isset($breadcrumbs))
     <div style="display: flex; justify-content: space-between; align-items: center;">
 
-        <h4 class="card-title"><?xml version="1.0" encoding="iso-8859-1"?>
+        <h4 class="card-title">
             <!-- Uploaded to: SVG Repo, www.svgrepo.com, Generator: SVG Repo Mixer Tools -->
             <!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
             <svg fill="currentColor" version="1.1" id="Capa_1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"
@@ -98,7 +98,7 @@
                         {{-- <div class="pb-4"> --}}
                             {{-- <div style="display: flex; justify-content: space-between; align-items: center;">
 
-                                <h3 class="card-title"><?xml version="1.0" encoding="iso-8859-1"?>
+                                <h3 class="card-title">
                                     <!-- Uploaded to: SVG Repo, www.svgrepo.com, Generator: SVG Repo Mixer Tools -->
                                     <!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
                                     <svg fill="currentColor" version="1.1" id="Capa_1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"
