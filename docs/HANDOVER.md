@@ -99,8 +99,15 @@ _Refreshed 2026-09-24 (end of the Phase 1 follow-up session). Redesign status ad
 - **2026-10-05, also pushed:** "Fix: remove stray <?xml ?> declarations from Blade views" (8 inline declarations in
   7 driver / driver-assignment views; with `short_open_tag` On they were a ParseError on the server) and "Security:
   password reset restricted to the admin's own organization" (§9.13, commit 1).
-- **Next:** commit 2 of the user-management fixes, users and roles (plan in §9.13). The null-safe `checkGlobal`
-  (§9.10 step 3) and the module ID corrections (step 4) wait until the user says to start them.
+- **2026-10-06:** "Security: user and role management restricted to the admin's own organization" (§9.13, commit 2),
+  pushed. The null-safe `checkGlobal` (§9.10 step 3) and the module ID corrections (step 4) wait until the user says
+  to start them.
+- **Next (user, 2026-10-06): test-speed report, no code yet.** Each feature test re-runs the full `DatabaseSeeder`,
+  including the 4.2 MB city seeder. The bigger clue: the same 6-test file took about 5 minutes (296 s) in a clean
+  export of the repo in the temp folder, but 9–17 minutes (529 s, 809 s, 1036 s) in the working tree. The full suite
+  takes 35–55 minutes. Report the options with the risk of each (seeding once per run, per-test transactions,
+  splitting the seeder) and explain the working-tree gap. Don't change the test setup while permission work is still
+  in flight.
 - **Standing rule:** report first; the user checks, then says "commit". Never commit, push, amend, reset or stash
   without that, and a described commit ("it must be its own commit") is not permission. No database writes; tests run
   only on `fleet_freak_testing`.
@@ -1275,7 +1282,12 @@ organization.
   roles, but the server accepts role 1 (the new user then gets `actor_id` 1 and the super admin dashboard) or
   another client's role.
 - **Show user** checks the client but not the organization: users of a sibling organization in the same client are
-  visible. The edit form's role list holds every client's roles (except role 1).
+  visible.
+- **Correction (2026-10-06):** an earlier version of this list said "the edit form's role list holds every client's
+  roles". That was wrong. `UserController@edit` did compute every client's roles (`Role::whereNot('actor_id', 1)`),
+  but the view never used them: the create and edit forms built their own drop-downs with
+  `Role::dropdown(client_id)`, the caller's client's roles only. The drop-downs were always correct; the hole was the
+  missing server-side validation. See §9.13.
 - **Delete user** (`UserController@destroy`) is broken: it looks the user up with `where('id', <the caller's own
   id>)`, so deleting anyone else is a 500 (null `->delete()`), and only self-deletion goes through. Hard delete.
 - **Deactivate:** no such feature. `users` has no active/status column.
@@ -1337,7 +1349,37 @@ organization.
   flagged agent; `password.update` is `/password/reset` and the reset form posts there. Against the old code
   (9 files swapped back temporarily) 7 of 8 fail; the flagged-agent case passes before and after.
 
-**Commit 2, users and roles (planned, not started):**
+**Commit 2, users and roles (committed 2026-10-06, "Security: user and role management restricted to the admin's own
+organization"):**
+- `Role::scopeAssignableBy($actor)`: the caller's client's roles, never the super admin role (custom roles have a
+  null `actor_id`, which counts as allowed); a user with no client gets none.
+- `UserController`: `show`, `edit` and `update` load the user through `manageableBy` (404 otherwise; `update` no
+  longer uses route-model binding). `store` and `update` validate `role_id` and `role_id_hidden` against the
+  assignable roles; when neither is sent, the current role is kept.
+- Role drop-downs (`user/form.blade.php`, `user/edituserform.blade.php`) now list the controller's `$roles`
+  (`Role::assignableBy`), so the drop-down and the server check share one rule. **They were already correct before
+  this change; don't "re-fix" them.** Both forms used to build their own list with `Role::dropdown(client_id)`: the
+  caller's client's roles only, so the super admin role (no client) and other clients' roles never appeared. The
+  controller's own `$roles` was computed but never rendered. Today both lists hold the same roles; the change is
+  only so they can't drift apart. The security fix is the server-side validation, and that's what the test proves;
+  the test deliberately has no drop-down check, because one couldn't tell the old code from the new.
+- `RoleController@update`: the role loads through the caller's client (404 otherwise), as `edit` does. A posted
+  `permission_id` is only written when the row belongs to this role and module; a new row is only created when the
+  permission type belongs to the module.
+- Test `tests/Feature/UserRoleManagementTest.php`, 6 tests, 48 assertions, all pass (full suite before the
+  drop-down change: OK, 60 tests, 442 assertions). Against the old code (a clean export of
+  `0d3c2f1` with the new test, so the working tree wasn't touched) 5 of 6 fail; the one that passes is "admin can
+  still view and edit a user in their organization", which is meant to pass on both. The tests: show, edit and update of a
+  user in another client, in a sibling organization, and of the super admin are 404 and change nothing; editing a
+  user in the organization still works; a second admin trying to give themselves the super admin role is refused
+  (role and actor unchanged); the client owner trying the same is a 404; the super admin role and another client's
+  role are refused on edit (also via `role_id_hidden` alone) and on create; a role edit saves its own row but leaves
+  forged admin and super admin rows untouched, and another client's role is a 404.
+- Found while building it (pre-existing, not fixed): `RoleController@destroy` has `if($role->is_system=1)`, an
+  assignment, so no role can ever be deleted; `User::update_user` reads `phone_no1`, `phone_no2` and `description`
+  without defaults (the edit form always sends them, so only a hand-made request hits the 500).
+
+**Commit 2 plan, as approved:**
 - `UserController@update`, `show` and `edit` load the user through `manageableBy` (404 otherwise).
 - `store` and `update` accept only assignable roles: the caller's client's roles, never the super admin role
   (`actor_id` 1). The create/edit role drop-downs use the same list.

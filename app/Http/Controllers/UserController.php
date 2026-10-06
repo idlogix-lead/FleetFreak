@@ -5,12 +5,11 @@ namespace App\Http\Controllers;
 use App\Models\Role;
 use App\Models\User;
 use App\Models\UserCompany;
-use Exception;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Response;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\Rule;
 
 /**
  * Class UserController
@@ -85,7 +84,7 @@ class UserController extends Controller
             ],
         ];
         $user = new User();
-        $roles = Role::where('client_id', auth()->user()->client_id)->get();
+        $roles = Role::assignableBy(auth()->user())->get();
         return view('user.create', compact('user', 'breadcrumbs', 'roles'));
     }
 
@@ -107,7 +106,8 @@ class UserController extends Controller
             'image' => ['nullable', 'image', 'max:2048'],
             'password' => ['required', 'min:8', 'confirmed'],
             'password_confirmation' => ['required', 'min:8'],
-            'role_id' => ['required'],
+            // Only the caller's client's roles, never the super admin role (docs/HANDOVER.md §9.12).
+            'role_id' => ['required', Rule::in($this->assignableRoleIds())],
             'vehicle_ids' => ['nullable', 'array'],
         ]);
         if ($validator->fails()) {
@@ -168,28 +168,10 @@ class UserController extends Controller
                 'active' => true,
             ],
         ];
-        // $user = User::checkGlobal(self::$role_module_id)->where('id', $this->my_companies[0]['pivot']['user_id'])->find($id);
-        try {
-            // Attempt to fetch the user
-            $user = User::checkGlobal(self::$role_module_id)
-            // ->where('id', $this->my_companies[0]['pivot']['user_id'])
+        // Only users the caller may manage (User::scopeManageableBy, docs/HANDOVER.md §9.12); anyone else is a 404.
+        $user = User::checkGlobal(self::$role_module_id)->manageableBy(auth()->user())->findOrFail($id);
 
-            // ->where('id', '!=', auth()->user()?->client->user->id)
-                ->where('id', '!=', auth()->user()?->client?->user?->id)
-                ->where('client_id', auth()->user()->client_id)
-                ->find($id);
-
-            if (!$user) {
-                throw new Exception("User not found.");
-            }
-            return view('user.show', compact('user', 'breadcrumbs'));
-
-        } catch (Exception $e) {
-            // Log the error and return an error response
-            Log::error("Error fetching user for showing: " . $e->getMessage());
-            return redirect()->route('users.index')->with('error', "An error occurred: " . $e->getMessage());
-        }
-
+        return view('user.show', compact('user', 'breadcrumbs'));
     }
 
     /**
@@ -212,32 +194,11 @@ class UserController extends Controller
                 'active' => true,
             ],
         ];
-        // dd(auth()->user()->id);
-        // $user = User::checkGlobal(self::$role_module_id)->where('id',$this->my_companies[0]['pivot']['user_id'])->find($id);
-        try {
-            // Attempt to fetch the user
-            $user = User::checkGlobal(self::$role_module_id)
-                ->whereHas('companies', function ($query) {
-                    return $query->where('company_id', auth()->user()->active_company());
-                })
-            // ->where('id', '!=', auth()->user()?->client->user->id)
-                ->where('id', '!=', auth()->user()?->client?->user?->id)
-                ->where('client_id', auth()->user()->client_id)
-                ->find($id);
+        // Only users the caller may manage (User::scopeManageableBy, docs/HANDOVER.md §9.12); anyone else is a 404.
+        $user = User::checkGlobal(self::$role_module_id)->manageableBy(auth()->user())->findOrFail($id);
 
-            if (!$user) {
-                throw new Exception("User not found.");
-            }
-
-            $roles = Role::whereNot('actor_id', 1)->get();
-            return view('user.edit', compact('user', 'breadcrumbs', 'roles'));
-
-        } catch (Exception $e) {
-            // Log the error and return an error response
-            Log::error("Error fetching user for editing: " . $e->getMessage());
-            return redirect()->route('users.index')->with('error', "An error occurred: " . $e->getMessage());
-        }
-
+        $roles = Role::assignableBy(auth()->user())->get();
+        return view('user.edit', compact('user', 'breadcrumbs', 'roles'));
     }
 
     /**
@@ -247,8 +208,11 @@ class UserController extends Controller
      * @param  User $user
      * *
      */
-    public function update(Request $request, User $user)
+    public function update(Request $request, $user)
     {
+        // Only users the caller may manage (User::scopeManageableBy, docs/HANDOVER.md §9.12); anyone else is a 404.
+        // Route-model binding used to load any user in any organization, the super admin included.
+        $user = User::checkGlobal(self::$role_module_id)->manageableBy(auth()->user())->findOrFail($user);
 
         // Validate the request data
 
@@ -258,9 +222,10 @@ class UserController extends Controller
             'phone_no1' => ['nullable'],
             'phone_no2' => ['nullable'],
             'description' => ['nullable'],
-            'role_id' => ['nullable'],
+            // Only the caller's client's roles, never the super admin role, including for the caller's own account.
+            'role_id' => ['nullable', Rule::in($this->assignableRoleIds())],
             'vehicle_ids' => ['nullable', 'array'],
-            'role_id_hidden' => ['nullable'],
+            'role_id_hidden' => ['nullable', Rule::in($this->assignableRoleIds())],
             'image' => ['nullable', 'image', 'max:2048'],
         ]);
         if ($validator->fails()) {
@@ -268,6 +233,8 @@ class UserController extends Controller
         }
         // Update lead attributes with validated data
         $data = $validator->validated();
+        // Neither role field sent: keep the current role (update_user reads both keys).
+        $data['role_id'] = $data['role_id'] ?? $data['role_id_hidden'] ?? $user->role_id;
         if ($request->hasFile('image')) {
             $image = $request->file('image');
             $imageName = time() . '_' . $image->getClientOriginalName();
@@ -312,6 +279,12 @@ class UserController extends Controller
         return redirect()->route('users.index')
             ->with('success', 'User deleted successfully');
     }
+    /** @return int[] the ids of the roles the caller may give a user (Role::scopeAssignableBy). */
+    private function assignableRoleIds(): array
+    {
+        return Role::assignableBy(auth()->user())->pluck('id')->all();
+    }
+
     // public function changePassword(Request $request ,$id){
     //     $validator = Validator::make($request->all(), [
     //     'password'=> 'required_with:password_confirmation|same:password_confirmation|min:8',

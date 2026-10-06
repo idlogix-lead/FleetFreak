@@ -70,6 +70,19 @@ class Role extends BaseModel
         // return $this;
     }
 
+    /**
+     * The roles $actor may give a user (docs/HANDOVER.md §9.12): their own client's roles, never the super admin role
+     * (actor 1). Custom roles have no actor, so a null actor_id counts as allowed.
+     */
+    public function scopeAssignableBy($query, User $actor)
+    {
+        if (! $actor->is_super_admin) {
+            $actor->client_id ? $query->where('roles.client_id', $actor->client_id) : $query->whereRaw('1 = 0');
+        }
+
+        return $query->where(fn ($q) => $q->whereNull('roles.actor_id')->orWhere('roles.actor_id', '!=', 1));
+    }
+
     static function register_company_role($actor_id, $client_id){
         // $modules = RoleModule::
         // whereHas('role_module_actors', function($role_module_actors) use($actor_id){

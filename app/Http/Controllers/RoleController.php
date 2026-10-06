@@ -7,6 +7,7 @@ use App\Models\RoleModule;
 use App\Models\RoleHasModule;
 use App\Models\RoleModuleActors;
 use App\Models\RolePermission;
+use App\Models\RolePermissionType;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -253,8 +254,12 @@ class RoleController extends Controller
      * @param  \Illuminate\Http\Request $request
      * @param  Role $role
      */
-    public function update(Request $request, Role $role)
+    public function update(Request $request, $role)
     {
+        // Only the caller's client's roles, as on the edit page (docs/HANDOVER.md §9.12). Route-model binding used to
+        // load any client's role.
+        $role = Role::where('client_id', auth()->user()->client_id)->checkGlobal(self::$role_module_id)->findOrFail($role);
+
         if($role->is_system){
             return redirect()->back()->with('error', 'System Roles are not editable');
         }
@@ -290,11 +295,15 @@ class RoleController extends Controller
                 continue;
             }
             foreach($permissions as $structure_id => $permission){
+                // permission_id and structure_id come from the form: only this role's rows for this module are
+                // written. Any posted row id used to be updated, whatever role it belonged to.
                 if($permission['permission_id']){
-                    RolePermission::where('id',$permission['permission_id'])->update([
+                    RolePermission::where('id',$permission['permission_id'])
+                        ->where('role_id', $role->id)->where('role_module_id', $module_id)
+                        ->update([
                         'permission' => $permission['permission'],
                     ]);
-                }else{
+                }elseif(RolePermissionType::where('id', $structure_id)->where('role_module_id', $module_id)->exists()){
                     RolePermission::create([
                         'role_module_id' => $module_id,
                         'role_permission_type_id' => $structure_id,
