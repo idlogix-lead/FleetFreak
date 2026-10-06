@@ -51,6 +51,12 @@
             </div>
             <br>
             <span class="text-center px-2" style="overflow: hidden;white-space: pre-line;"> {{ $data['body'] }} </span>
+            {{-- Only the user's own profile asks for the current password; an admin resetting someone else's doesn't. --}}
+            @if (!empty($data['current_password']))
+            <div class="input-group mb-3 ">
+                <input type="password" style="margin-left: 20px; margin-right: 20px; margin-top: 4px;" name="current_password" id="current_password" class="form-control" placeholder="Current Password" autocomplete="current-password">
+            </div>
+            @endif
             <div class="input-group mb-3  ">
                 <input type="password" style="margin-left: 20px; margin-right: 20px; margin-top: 4px;" name="password" id="password" class="form-control" placeholder="New Password">
             </div>

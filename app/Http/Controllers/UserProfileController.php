@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Hash;
 use App\Models\User;
 
 class UserProfileController extends Controller
@@ -36,5 +37,20 @@ class UserProfileController extends Controller
         $user->update($validatedData);
 
         return redirect()->back()->with('success', 'Profile updated successfully');
+    }
+
+    /** Every user changes their own password here, after confirming the current one (docs/HANDOVER.md §9.12). */
+    public function updatePassword(Request $request)
+    {
+        $validated = $request->validate([
+            'current_password' => ['required', 'current_password'],
+            'password' => ['required', 'string', 'min:8', 'confirmed', 'different:current_password'],
+        ]);
+
+        $user = $request->user();
+        $user->password = Hash::make($validated['password']);
+        $user->save();
+
+        return redirect()->back()->with('success', 'Password changed successfully.');
     }
 }

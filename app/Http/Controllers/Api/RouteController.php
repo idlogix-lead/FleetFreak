@@ -297,7 +297,7 @@ class RouteController extends Controller
     {
         // $user = Auth::user();
         $company_id =auth()->user()->active_company();
-        $route = Route::find($id)->where('company_id',$company_id)->delete();
+        $route = Route::where('company_id', $company_id)->findOrFail($id)->delete();
 
         // return redirect()->route('routes.index')
         //     ->with('success', 'Route deleted successfully');

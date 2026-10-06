@@ -194,10 +194,10 @@
 
             console.log(structure_id);
             if (structure_id) {
-                $.post('/delete-activity-row/' + structure_id, {
+                ffsQuiet($.post('/delete-activity-row/' + structure_id, {
                     "_token": "{{ csrf_token() }}",
                     "_method": "DELETE",
-                }).then(function(data) {
+                })).then(function(data) {
                      // Check the response from the server
                     if (data.success) {
                         // Remove the row and show success message

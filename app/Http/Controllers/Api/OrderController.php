@@ -80,7 +80,11 @@ class OrderController extends Controller
         //     });
         // })->orderBy('created_at', 'desc')->paginate($perPage);
 
-        $orders = Order::with('orderDetails','partner_customer','business_partner')->where('company_id', $companyId)->checkGlobal(45)->where('overall_status', '!=', 'pending')->where('overall_status', '!=', 'approved')->where('created_by', auth()->user()->id)->orderBy('created_at', 'desc')->get();
+        // Agents see the orders that are theirs (business_partner_id), including ones an admin created for them.
+        $user = auth()->user();
+        $orders = Order::with('orderDetails','partner_customer','business_partner')->where('company_id', $companyId)->checkGlobal(45)->where('overall_status', '!=', 'pending')->where('overall_status', '!=', 'approved')
+            ->when(Order::isAgent($user), fn ($q) => $q->accessibleBy($user), fn ($q) => $q->where('created_by', $user->id))
+            ->orderBy('created_at', 'desc')->get();
 
 
         return response()->json([
@@ -386,6 +390,7 @@ class OrderController extends Controller
           }else{
               $order_data = $order_validator->validated();
           }
+        $order_data = Order::applyAgentRules($order_data, auth()->user());
         // $order_data = $request->all();
         $order_data['created_by'] = auth()->user()->id;
         // dd($order_data);
@@ -645,7 +650,10 @@ class OrderController extends Controller
                 'active' => true,
             ],
         ];
-        $order = Order::find($id);
+        $order = Order::accessibleBy(auth()->user())->find($id);
+        if (! $order) {
+            return response()->json(['message' => 'Order not found'], 404);
+        }
 
         return response()->json([
             // 'breadcrumbs' => $breadcrumbs,
@@ -674,8 +682,11 @@ class OrderController extends Controller
             ],
         ];
         // $order = Order::find($id);
-        $order = Order::with('orderDetails','partner_customer','business_partner')->checkGlobal(45)->where('company_id', auth()->user()->active_company())->find($id);
-        
+        $order = Order::with('orderDetails','partner_customer','business_partner')->checkGlobal(45)->accessibleBy(auth()->user())->where('company_id', auth()->user()->active_company())->find($id);
+        if (! $order) {
+            return response()->json(['message' => 'Order not found'], 404);
+        }
+
         // $business_partner = Partner::where('partner_type', 'business')->get();
         // $customer_partner = Partner::where('partner_type', 'customer')->get();
 
@@ -700,7 +711,10 @@ class OrderController extends Controller
     public function api_update(Request $request, $order)
     {
         $payload = [];
-        $order = Order::find($order);
+        $order = Order::accessibleBy(auth()->user())->find($order);
+        if (! $order) {
+            return response()->json(['message' => 'Order not found'], 404);
+        }
 
         $order_validator_rules = [
             'overall_status' => ['required'],
@@ -838,6 +852,7 @@ class OrderController extends Controller
           }else{
               $order_data = $order_validator->validated();
           }
+        $order_data = Order::applyAgentRules($order_data, auth()->user());
         $order_data['updated_by'] = auth()->user()->id;
         // dd($order_data);
         // $authenticatedUser = auth()->user();
@@ -963,10 +978,21 @@ class OrderController extends Controller
             'overall_status' => ['required'],
         ]);
 
-        $order = Order::find($id);
+        // In $ignores, so every API user reaches it (docs/HANDOVER.md §9.9): admins may set any order in their
+        // organization, agents only their own and only to draft, pending or cancelled, and nobody else at all.
+        $user = auth()->user();
+        if ((int) $user->actor_id !== 2 && ! Order::isAgent($user)) {
+            return response()->json(['message' => "You don't have permission to change an order's status."], 403);
+        }
+
+        $order = Order::accessibleBy($user)->find($id);
 
         if (!$order) {
             return response()->json(['message' => 'Order not found'], 404);
+        }
+
+        if (Order::isAgent($user) && ! in_array($request->input('overall_status'), Order::AGENT_STATUS_CHANGES, true)) {
+            return response()->json(['message' => 'Agents can only set an order to draft, pending or cancelled.'], 422);
         }
 
         $order->overall_status = $request->input('overall_status');

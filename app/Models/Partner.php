@@ -255,23 +255,25 @@ class Partner extends BaseModel
             $$key = $val;
         }
 
+        // Shared by drivers and employees. The prefix / NIC / licence / emergency-contact fields only
+        // exist on the driver form, so they default to null (all nullable columns) for employees.
         $data = [
             'name' => $partner_data['name'],
             // 'partner_type' => $partner_data['partner_type'],
             'email' => $partner_data['email'],
             'phone_no' => $partner_data['phone_no'],
             'whatsapp_no' => $partner_data['whatsapp_no'],
-            'prefix_whatsapp' => $partner_data['prefix_whatsapp'],
+            'prefix_whatsapp' => $partner_data['prefix_whatsapp'] ?? null,
             'prefix_phone' => $partner_data['prefix_phone']?? null,
-            'prefix_emergency_contact1' => $partner_data['prefix_emergency_contact1'],
-            'prefix_emergency_contact2' => $partner_data['prefix_emergency_contact2'],
+            'prefix_emergency_contact1' => $partner_data['prefix_emergency_contact1'] ?? null,
+            'prefix_emergency_contact2' => $partner_data['prefix_emergency_contact2'] ?? null,
             // 'nic_no' => $partner_data['nic_no'],
-            'nic_expiry_date' => $partner_data['nic_expiry_date'],
-            'license_country' => $partner_data['license_country'],
-            'licensee_expiry_date' => $partner_data['licensee_expiry_date'],
-            'emergency_contact_no1' => $partner_data['emergency_contact_no1'],
-            'emergency_contact_no2' => $partner_data['emergency_contact_no2'],
-            'emergency_contact_name' => $partner_data['emergency_contact_name'],
+            'nic_expiry_date' => $partner_data['nic_expiry_date'] ?? null,
+            'license_country' => $partner_data['license_country'] ?? null,
+            'licensee_expiry_date' => $partner_data['licensee_expiry_date'] ?? null,
+            'emergency_contact_no1' => $partner_data['emergency_contact_no1'] ?? null,
+            'emergency_contact_no2' => $partner_data['emergency_contact_no2'] ?? null,
+            'emergency_contact_name' => $partner_data['emergency_contact_name'] ?? null,
             'cnic' => $partner_data['cnic'],
 
 
@@ -289,7 +291,7 @@ class Partner extends BaseModel
             'experience'=>$partner_data['experience'] ?? null,
             'akama'=>$partner_data['akama'] ?? null,
             'actor_id'=>$partner_data['actor_id'],
-            'driver_license'=>$partner_data['driver_license'],
+            'driver_license'=>$partner_data['driver_license'] ?? null,
             'company_id'=>auth()->user()->active_company()
 
 
@@ -417,18 +419,9 @@ class Partner extends BaseModel
             'email' => $partner_data['email'],
             'phone_no' => $partner_data['phone_no'],
             'whatsapp_no' => $partner_data['whatsapp_no'],
-            'prefix_whatsapp' => $partner_data['prefix_whatsapp'],
             'prefix_phone' => $partner_data['prefix_phone']?? null,
             'cnic' => $partner_data['cnic'],
-            'prefix_emergency_contact1' => $partner_data['prefix_emergency_contact1'],
-            'prefix_emergency_contact2' => $partner_data['prefix_emergency_contact2'],
             // 'nic_no' => $partner_data['nic_no'],
-            'nic_expiry_date' => $partner_data['nic_expiry_date'],
-            'license_country' => $partner_data['license_country'],
-            'licensee_expiry_date' => $partner_data['licensee_expiry_date'],
-            'emergency_contact_no1' => $partner_data['emergency_contact_no1'],
-            'emergency_contact_no2' => $partner_data['emergency_contact_no2'],
-            'emergency_contact_name' => $partner_data['emergency_contact_name'],
             'address1' => $partner_data['address1'],
             'address2' => $partner_data['address2']?? null,
             'address3' => $partner_data['address3']?? null,
@@ -443,10 +436,18 @@ class Partner extends BaseModel
             'experience'=>$partner_data['experience'] ?? null,
             'akama'=>$partner_data['akama'] ?? null,
             'actor_id'=>$partner_data['actor_id'],
-            'driver_license'=>$partner_data['driver_license'],
             'company_id'=>$company,
 
         ];
+        // Shared by drivers and employees. These fields only exist on the driver form, so they are
+        // written only when sent; an employee edit (or a request that omits one) keeps the stored value.
+        foreach (['prefix_whatsapp', 'prefix_emergency_contact1', 'prefix_emergency_contact2', 'nic_expiry_date',
+                  'license_country', 'licensee_expiry_date', 'emergency_contact_no1', 'emergency_contact_no2',
+                  'emergency_contact_name', 'driver_license'] as $driverField) {
+            if (array_key_exists($driverField, $partner_data)) {
+                $data[$driverField] = $partner_data[$driverField];
+            }
+        }
         if (isset($call_from_employee_controller)) {
             $data['employee_type'] = $partner_data['employee_type'];
 

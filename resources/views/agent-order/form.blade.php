@@ -2020,10 +2020,10 @@
                 let structure_id = $('#structure_id_' + row_id).val();
                 console.log(structure_id);
                 if (structure_id) {
-                    $.post('/delete-route-row/' + structure_id, {
+                    ffsQuiet($.post('/delete-route-row/' + structure_id, {
                         "_token": "{{ csrf_token() }}",
                         "_method": "DELETE",
-                    }).then(function(data) {
+                    })).then(function(data) {
                         console.log(data);
                         $("#structure_" + row_id).remove();
                         toastr.options = {
@@ -2057,10 +2057,10 @@
             let structure_id = $('#structure_id_' + row_id).val();
             console.log(structure_id);
             if (structure_id) {
-                $.post('/delete-route-row/' + structure_id, {
+                ffsQuiet($.post('/delete-route-row/' + structure_id, {
                     "_token": "{{ csrf_token() }}",
                     "_method": "DELETE",
-                }).then(function(data) {
+                })).then(function(data) {
                     console.log(data);
                     $("#structure_" + row_id).remove();
                     toastr.options = {

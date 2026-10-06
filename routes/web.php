@@ -164,6 +164,7 @@ Route::group(['middleware' => ['auth', 'afterauth']], function () {
     // profile controller
     Route::get('user-profile', [UserProfileController::class, 'create'])->name('user-profile.create');
     Route::post('user-profile', [UserProfileController::class, 'updateprofile'])->name('user-profile.update');
+    Route::put('user-profile/password', [UserProfileController::class, 'updatePassword'])->name('user-profile.password');
     //Theme controller
     Route::post('update-theme', [ThemeController::class, 'update_theme'])->name('theme.update');
     Route::post('update-header', [ThemeController::class, 'update_header']);
@@ -408,8 +409,10 @@ Route::group(['middleware' => ['auth', 'afterauth']], function () {
     // Route::get('/order/{ordertype}', [DashboardController::class, 'orders_index'])->name('dashboard.orders_agent');
 
     // one time password change for agent
+    // (Its POST is named password.change.update: Auth::routes() already uses password.update for the
+    // forgot-password reset form, and reusing the name sent that form here.)
     Route::get('/password/change', [PasswordChangeController::class, 'showChangePasswordForm'])->name('password.change');
-    Route::post('/password/change', [PasswordChangeController::class, 'updatePassword'])->name('password.update');
+    Route::post('/password/change', [PasswordChangeController::class, 'updatePassword'])->name('password.change.update');
 
     // Route::put('/change-password/{id}', [UserController::class, 'changePassword'])->name('users.change-password');
     Route::put('/change-password/{id}', [OrderController::class, 'changePassword'])->name('users.change-password');

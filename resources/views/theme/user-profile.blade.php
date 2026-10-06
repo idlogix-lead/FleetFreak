@@ -335,7 +335,7 @@
                                             </form>
                                             <div style="margin-top: -30px;" class="row">
 
-                                                    <form action="{{ route('users.change-password',$user->id) }}" method="POST">
+                                                    <form action="{{ route('user-profile.password') }}" method="POST">
                                                         @csrf
                                                         @method('PUT')
                                                         @php
@@ -347,7 +347,8 @@
                                                             'body' => 'Please Enter Your Password '.$user->name.' ?',
                                                             'btn-color' => 'success',
                                                             'float' => "end",
-                                                            'id' => "changepassword-$user->id"
+                                                            'id' => "changepassword-$user->id",
+                                                            'current_password' => true,
                                                             ];
                                                         @endphp
 

@@ -20,7 +20,8 @@
                 <label for="role_id">Role Name</label>
                 <select name="role_id" id="role_id" class="form-control {{ $errors->has('role_id') ? ' is-invalid' : '' }}">
                     <option value="">Select Role</option>
-                    @foreach(App\Models\Role::dropdown( client_id:auth()->user()->client_id) as $role)
+                    {{-- $roles: Role::assignableBy, the same rule UserController@update validates against. --}}
+                    @foreach($roles as $role)
                         <option value="{{ $role->id }}" {{ $role->id == $user->role_id ? 'selected' : '' }}>{{ $role->name }}</option>
                     @endforeach
                 </select>

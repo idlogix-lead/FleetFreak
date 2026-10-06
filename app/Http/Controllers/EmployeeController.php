@@ -353,7 +353,7 @@ class EmployeeController extends Controller
      */
     public function destroy($id)
     {
-        $partner = Partner::find($id)->where('company_id',auth()->user()->active_company())->delete();
+        $partner = Partner::where('company_id', auth()->user()->active_company())->findOrFail($id)->delete();
 
         return redirect()->route('employees.index')
             ->with('success', 'Employee deleted successfully');

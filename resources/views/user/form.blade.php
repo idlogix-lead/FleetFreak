@@ -36,7 +36,8 @@
                         {{ $role->name }}
                     </option> --}} 
 
-                    @foreach(App\Models\Role::dropdown( client_id:auth()->user()->client_id) as $role)
+                    {{-- $roles: Role::assignableBy, the same rule UserController@store validates against. --}}
+                    @foreach($roles as $role)
                         <option value="{{ $role->id }}" {{$user->role_id ==$role->id ? 'selected': ''}}>{{ $role->name }}</option>
 
                     @endforeach

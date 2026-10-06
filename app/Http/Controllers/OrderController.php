@@ -9,6 +9,7 @@ use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Response;
 use Illuminate\Support\Facades\Validator;
 
@@ -682,6 +683,13 @@ class OrderController extends Controller
     }
     public function deleteRow($id)
     {
+        // Shared by every order form, the agent's included: an agent may only remove lines from their own orders
+        // (docs/HANDOVER.md §9.3). Other users are unchanged.
+        $user = auth()->user();
+        if (Order::isAgent($user) && ! OrderDetail::whereKey($id)->whereHas('order', fn ($q) => $q->accessibleBy($user))->exists()) {
+            return response()->json(['error' => 'Row not found'], 404);
+        }
+
         try {
             // Find the row by ID and delete it
             $order_detail = OrderDetail::findOrFail($id);
@@ -692,19 +700,33 @@ class OrderController extends Controller
             return response()->json(['error' => 'Failed to remove row'], 500);
         }
     }
+    /**
+     * An admin resets another user's password (PUT /change-password/{id}, used by the user list and the partner edit
+     * pages). Only users the admin may manage (User::scopeManageableBy, docs/HANDOVER.md §9.12); anyone else is a 404.
+     * An admin's own password is changed on the profile page, which asks for the current one.
+     */
     public function changePassword(Request $request, $id)
     {
+        $actor = auth()->user();
+        if ((int) $id === (int) $actor->id) {
+            return back()->with('error', 'Change your own password from your profile page.');
+        }
+        $user = User::manageableBy($actor)->findOrFail($id);
+
         $validator = Validator::make($request->all(), [
-            'password' => 'required_with:password_confirmation|same:password_confirmation|min:8',
-            'password_confirmation' => 'required_with:password|same:password|min:8']);
+            'password' => ['required', 'string', 'min:8', 'confirmed'],
+        ]);
         if ($validator->fails()) {
             return back()->with('errors', $validator->errors());
         }
         // Update lead attributes with validated data
         $data = $validator->validated();
-        $user = User::findOrFail($id);
         $user->password = Hash::make($data['password']);
         $user->save();
+
+        // The old password's API tokens go with it: the mobile app signs in again with the new password.
+        $user->tokens()->delete();
+        Log::notice('Password reset by an admin', ['actor_id' => $actor->id, 'user_id' => $user->id]);
 
         return redirect()->back()->with('success', 'Password changed successfully!');
     }

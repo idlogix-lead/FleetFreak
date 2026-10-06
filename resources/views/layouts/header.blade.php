@@ -199,4 +199,5 @@
         </div>
     @endif
 </header>
-<script src="{{ asset('assets/js/app-shell.js') }}" defer></script>
+{{-- Not deferred: it defines ffsQuiet() and the AJAX error toasts before page scripts run. --}}
+<script src="{{ asset('assets/js/app-shell.js') }}?v={{ filemtime(public_path('assets/js/app-shell.js')) }}"></script>

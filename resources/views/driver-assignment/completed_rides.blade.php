@@ -45,7 +45,7 @@
                         <div class="pb-4">
                             <div style="display: flex; justify-content: space-between; align-items: center;">
 
-                                <h3 class="card-title"><?xml version="1.0" encoding="iso-8859-1"?>
+                                <h3 class="card-title">
                                     <!-- Uploaded to: SVG Repo, www.svgrepo.com, Generator: SVG Repo Mixer Tools -->
                                     <svg fill="currentColor" height="22" width="22" version="1.1" id="Layer_1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" 
                                          viewBox="0 0 512 512" xml:space="preserve">

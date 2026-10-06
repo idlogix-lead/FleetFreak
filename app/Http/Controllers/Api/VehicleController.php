@@ -399,7 +399,7 @@ class VehicleController extends Controller
     {
         $user = Auth::user();
         $company_id = auth()->user()->active_company();
-        $vehicle = Vehicle::find($id)->where('company_id',$company_id)->delete();
+        $vehicle = Vehicle::where('company_id', $company_id)->findOrFail($id)->delete();
 
         // return redirect()->route('vehicles.index')
         //     ->with('success', 'Vehicle deleted successfully');

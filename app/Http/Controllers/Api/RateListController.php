@@ -233,7 +233,7 @@ class RateListController extends Controller
     {
         $user=auth()->user();
         $company_id=auth()->user()->active_company();
-        $ratelist = RateList::find($id)->where('company_id',$company_id)->delete();
+        $ratelist = RateList::where('company_id', $company_id)->findOrFail($id)->delete();
 
         // return redirect()->route('ratelists.index')
         //     ->with('success', 'Package deleted successfully');
