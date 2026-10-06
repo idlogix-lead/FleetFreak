@@ -136,6 +136,8 @@ _Refreshed 2026-09-24 (end of the Phase 1 follow-up session). Redesign status ad
 - **2026-10-06:** "Security: user and role management restricted to the admin's own organization" (§9.13, commit 2),
   pushed. The null-safe `checkGlobal` (§9.10 step 3) and the module ID corrections (step 4) wait until the user says
   to start them.
+  - **Update (2026-10-06):** steps 3 and 4 are done and committed ("Null-safe checkGlobal; tour, daily and rental
+    bookings use their own module"). What changed is in §9.14. Next on that list: step 5, the vendor export.
 - **Next (user, 2026-10-06): test-speed report, no code yet.** Each feature test re-runs the full `DatabaseSeeder`,
   including the 4.2 MB city seeder. The bigger clue: the same 6-test file took about 5 minutes (296 s) in a clean
   export of the repo in the temp folder, but 9–17 minutes (529 s, 809 s, 1036 s) in the working tree. The full suite
@@ -1238,9 +1240,9 @@ Fixed in its own commit, "Security: delete endpoints removed every row in the co
      - Mobile, as A on B's order: show, edit, update and updatestatus are 404, order unchanged; on A's own order
        they work; status rules enforced; a non-agent, non-admin role gets 403.
      - The admin is unaffected, including deleting lines on any order.
-3. **Null-safe `checkGlobal`** with the warning log, shared by all 9 models (§9.8).
+3. **Null-safe `checkGlobal`** with the warning log, shared by all 9 models (§9.8). Built 2026-10-06, see §9.14.
 4. **Module ID corrections** for TourService, DailyRental and RentalVehicle, and the 404 page for missing records
-   (§9.8).
+   (§9.8). Built 2026-10-06, see §9.14.
 5. **Vendor export** gets its own export class and module (§9.9).
 
 **Not scheduled yet; each needs its own plan and the user's approval:**
@@ -1442,6 +1444,37 @@ organization"):**
   unchanged.
 - Not in this work (reported only): delete user (broken), deactivate (no such feature), custom roles holding
   platform modules, the agent-approval role, `POST /api/register` (web focus).
+
+### 9.14 Null-safe `checkGlobal` and module ID corrections (§9.10 steps 3–4; committed 2026-10-06)
+
+- **Impact on existing data (checked read-only on the dev DB, 2026-10-06):** all 88 role-module assignments have a
+  `global` row and every one is ticked, so for every existing role `checkGlobal` behaves exactly as before. Modules 9,
+  41, 42 and 43 are held only by the admin role (ticked). The only visible change is show/edit with a missing id:
+  404 instead of 500. A production database could differ; there the changes only go from a crash to working.
+
+- **One `checkGlobal`:** new trait `app/Models/Concerns/ChecksGlobalPermission.php` replaces the 9 identical copies
+  (Actor, Order, Partner, RateList, Role, RoleModule, Route, User, Vehicle). Callers don't change.
+  - `global` ticked: no filter. Unticked: own records only (`<table>.created_by`). Both as before.
+  - **No `global` row:** treated like unticked, plus a `warning` log line (`checkGlobal: no global permission row`,
+    with `user_id`, `role_id`, `role_module_id`). It used to crash with "Attempt to read property permission on null".
+  - **Tables without `created_by`** (`actors`, `routes`, `rate_lists`): the own-records filter used to fail with a SQL
+    error; now they return nothing (fail closed). No role is affected today: only the admin and super admin hold
+    those modules, with `global` ticked.
+- **Module IDs:** TourService (43) and DailyRental (42) index/show/edit and RentalVehicle (41) show/edit now pass
+  `self::$role_module_id` instead of Orders (9). Their own module's `global` tick now decides; a role holding them but
+  not Orders no longer crashes. No change for the admin (role 2 has `global` ticked on 9, 41, 42 and 43).
+- **404:** those six show/edit methods use `findOrFail`, so a missing or other-company record is the 404 page
+  instead of a crash in the view.
+- **Test `tests/Feature/CheckGlobalTest.php`, 6 tests, 36 assertions:** a role holding 41–43 but not Orders opens all
+  three lists, show and edit; unticked `global` lists only its own order and 404s on the admin's; a deleted `global`
+  row behaves like unticked and logs the warning; non-existent ids are 404; the admin still sees everything; `Route`
+  (no `created_by`) returns nothing and `Vehicle` filters on `created_by`.
+  - **Against the old code** (clean export of `53e7126`): 5 of 6 fail (500s, and the null crash). "Admin still sees
+    everything" passes on both; it is there to show the admin is unaffected. "Unticked shows only own orders" fails
+    on the old code because of the module-9 crash, not because unticked behaved differently: that behaviour is
+    unchanged.
+- **Full suite:** OK, 66 tests, 477 assertions, normal order (69 s) and random order (45 s, seed 1791280785).
+- **Still open:** the vendor export (§9.10 step 5).
 
 ---
 

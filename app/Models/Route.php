@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\ChecksGlobalPermission;
 use App\Models\Concerns\BelongsToOrganization;
 use Illuminate\Database\Eloquent\Model;
 
@@ -24,7 +25,7 @@ use Illuminate\Database\Eloquent\Model;
  */
 class Route extends BaseModel
 {
-    use BelongsToOrganization;
+    use BelongsToOrganization, ChecksGlobalPermission;
 
     // static $rules = [
 	// 		'name' => 'required|string',
@@ -64,12 +65,6 @@ class Route extends BaseModel
     public function ratelist()
     {
         return $this->hasMany(\App\Models\RateList::class);
-    }
-    public function scopecheckGlobal($query, $role_module_id){
-        return $query->when(!auth()->user()->role_module_permission_via_action($role_module_id,'global')->permission, function($query){
-            $query->where('created_by', auth()->user()->id);
-        });
-        // return $this;
     }
 
 

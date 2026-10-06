@@ -59,7 +59,7 @@ class TourServiceController extends Controller
             $orders = Order::when($companyId, function ($query) use ($companyId) {
                 return $query->where('company_id', $companyId);
             })
-                ->checkGlobal(9)->whereNotIn('overall_status', ['pending', 'approved'])->where('trip_type', 'tour_booking')
+                ->checkGlobal(self::$role_module_id)->whereNotIn('overall_status', ['pending', 'approved'])->where('trip_type', 'tour_booking')
                 ->when($query, function ($q) use ($query) {
                     $q->where(function ($q) use ($query) {
                         $q->where('order_no', 'ILIKE', '%' . $query . '%')
@@ -75,7 +75,7 @@ class TourServiceController extends Controller
 
         } else {
             $orders = Order::where('company_id', $companyId)
-                ->checkGlobal(9)->where('overall_status', '!=', 'pending')->where('overall_status', '!=', 'approved')->where('created_by', auth()->user()->id)->when($query, function ($q) use ($query) {
+                ->checkGlobal(self::$role_module_id)->where('overall_status', '!=', 'pending')->where('overall_status', '!=', 'approved')->where('created_by', auth()->user()->id)->when($query, function ($q) use ($query) {
                 $q->where(function ($q) use ($query) {
                     $q->where('order_no', 'ILIKE', '%' . $query . '%')
                         ->orWhere('overall_status', 'ILIKE', '%' . $query . '%')
@@ -351,7 +351,7 @@ class TourServiceController extends Controller
                 'active' => true,
             ],
         ];
-        $order = Order::checkGlobal(9)->where('company_id',auth()->user()->active_company())->find($id);
+        $order = Order::checkGlobal(self::$role_module_id)->where('company_id',auth()->user()->active_company())->findOrFail($id);
 
         return view('tour-service.show', compact('order', 'breadcrumbs'));
     }
@@ -376,7 +376,7 @@ class TourServiceController extends Controller
                 'active' => true,
             ],
         ];
-        $order = Order::checkGlobal(9)->where('company_id',auth()->user()->active_company())->find($id);
+        $order = Order::checkGlobal(self::$role_module_id)->where('company_id',auth()->user()->active_company())->findOrFail($id);
 
         // dd($order);
         // $business_partner = Partner::where('partner_type','business')->get();

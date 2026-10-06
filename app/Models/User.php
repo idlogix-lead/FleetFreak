@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\ChecksGlobalPermission;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
@@ -56,7 +57,7 @@ use Illuminate\Notifications\Notifiable;
  */
 class User extends AuthenticatableModel
 {
-    use HasFactory, Notifiable,HasApiTokens;
+    use HasFactory, Notifiable,HasApiTokens, ChecksGlobalPermission;
 
     // static $rules = [
 	// 		'name' => 'required|string',
@@ -179,12 +180,6 @@ class User extends AuthenticatableModel
     }
 
 
-    public function scopecheckGlobal($query, $role_module_id){
-        return $query->when(!auth()->user()->role_module_permission_via_action($role_module_id,'global')->permission, function($query){
-            $query->where('created_by', auth()->user()->id);
-        });
-        // return $this;
-    }
 
     /**
      * The users $actor may manage (docs/HANDOVER.md §9.12). `users` is outside the organization scope, so every

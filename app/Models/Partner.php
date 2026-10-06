@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\ChecksGlobalPermission;
 use App\Models\Concerns\BelongsToOrganization;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Hash;
@@ -36,7 +37,7 @@ use Illuminate\Support\Facades\Auth;
  */
 class Partner extends BaseModel
 {
-    use BelongsToOrganization;
+    use BelongsToOrganization, ChecksGlobalPermission;
 
     // static $rules = [
 	// 		'name' => 'required|string',
@@ -121,12 +122,6 @@ class Partner extends BaseModel
     {
         return $this->belongsTo(Company::class);
 
-    }
-    public function scopecheckGlobal($query, $role_module_id){
-        return $query->when(!auth()->user()->role_module_permission_via_action($role_module_id,'global')->permission, function($query){
-            $query->where('created_by', auth()->user()->id);
-        });
-        // return $this;
     }
     static function store_customer($payload){
         foreach($payload as $key => $val){

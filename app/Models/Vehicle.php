@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\ChecksGlobalPermission;
 use App\Models\Concerns\BelongsToOrganization;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Model;
@@ -33,7 +34,7 @@ use Illuminate\Database\Eloquent\Model;
  */
 class Vehicle extends BaseModel
 {
-    use BelongsToOrganization;
+    use BelongsToOrganization, ChecksGlobalPermission;
 
     // static $rules = [
     //         'vehicle_identification_number' => 'required|alpha_num',
@@ -125,13 +126,6 @@ class Vehicle extends BaseModel
     // {
     //     return $this->hasMany(OrderDetail::class);
     // }
-    public function scopecheckGlobal($query, $role_module_id)
-    {
-        return $query->when(!auth()->user()->role_module_permission_via_action($role_module_id, 'global')->permission, function ($query) {
-            $query->where('created_by', auth()->user()->id);
-        });
-        // return $this;
-    }
 
     public static function store_vehicle($payload)
     {

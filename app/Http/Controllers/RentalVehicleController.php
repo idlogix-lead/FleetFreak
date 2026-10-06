@@ -396,7 +396,7 @@ class RentalVehicleController extends Controller
                 'active' => true,
             ],
         ];
-        $order = Order::checkGlobal(9)->where('company_id',auth()->user()->active_company())->find($id);
+        $order = Order::checkGlobal(self::$role_module_id)->where('company_id',auth()->user()->active_company())->findOrFail($id);
 
         return view('rental-vehicle.show', compact('order', 'breadcrumbs'));
     }
@@ -421,7 +421,7 @@ class RentalVehicleController extends Controller
                 'active' => true,
             ],
         ];
-        $order = Order::checkGlobal(9)->where('company_id',auth()->user()->active_company())->find($id);
+        $order = Order::checkGlobal(self::$role_module_id)->where('company_id',auth()->user()->active_company())->findOrFail($id);
 
         // dd($order);
         // $business_partner = Partner::where('partner_type','business')->get();

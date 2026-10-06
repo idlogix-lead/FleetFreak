@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\ChecksGlobalPermission;
 use Illuminate\Database\Eloquent\Model;
 
 /**
@@ -21,6 +22,7 @@ use Illuminate\Database\Eloquent\Model;
  */
 class Actor extends BaseModel
 {
+    use ChecksGlobalPermission;
 
     // static $rules = [
 	// 		'name' => 'required|string',
@@ -60,12 +62,6 @@ class Actor extends BaseModel
     public function users()
     {
         return $this->hasMany(\App\Models\User::class, 'id', 'actor_id');
-    }
-    public function scopecheckGlobal($query, $role_module_id){
-        return $query->when(!auth()->user()->role_module_permission_via_action($role_module_id,'global')->permission, function($query){
-            $query->where('created_by', auth()->user()->id);
-        });
-        // return $this;
     }
 
 

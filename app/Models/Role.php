@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\ChecksGlobalPermission;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
@@ -21,7 +22,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
  */
 class Role extends BaseModel
 {
-    use SoftDeletes;
+    use SoftDeletes, ChecksGlobalPermission;
 
     static $rules = [
 		'name' => 'required',
@@ -63,12 +64,6 @@ class Role extends BaseModel
     }
 
 
-    public function scopecheckGlobal($query, $role_module_id){
-        return $query->when(!auth()->user()->role_module_permission_via_action($role_module_id,'global')->permission, function($query){
-            $query->where('created_by', auth()->user()->id);
-        });
-        // return $this;
-    }
 
     /**
      * The roles $actor may give a user (docs/HANDOVER.md §9.12): their own client's roles, never the super admin role

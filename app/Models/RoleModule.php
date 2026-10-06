@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\ChecksGlobalPermission;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
@@ -20,7 +21,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
  */
 class RoleModule extends BaseModel
 {
-    use SoftDeletes;
+    use SoftDeletes, ChecksGlobalPermission;
 
     static $rules = [
 		'name' => 'required',
@@ -70,12 +71,6 @@ class RoleModule extends BaseModel
     }
     public function role_has_modules(){
         return $this->hasMany(RoleHasModule::class);
-    }
-    public function scopecheckGlobal($query, $role_module_id){
-        return $query->when(!auth()->user()->role_module_permission_via_action($role_module_id,'global')->permission, function($query){
-            $query->where('created_by', auth()->user()->id);
-        });
-        // return $this;
     }
 
     public static function getRoleModuleDropdown($ignore = []){

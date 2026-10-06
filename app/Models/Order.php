@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\ChecksGlobalPermission;
 use App\Models\Concerns\BelongsToOrganization;
 use App\Models\Concerns\HasClient;
 use Carbon\Carbon;
@@ -30,7 +31,7 @@ use Illuminate\Support\Facades\Auth;
  */
 class Order extends BaseModel
 {
-    use BelongsToOrganization, HasClient;
+    use BelongsToOrganization, HasClient, ChecksGlobalPermission;
 
     // static $rules = [
     //         'order_no' => 'required|string',
@@ -129,13 +130,6 @@ class Order extends BaseModel
     {
         return $this->belongsTo(Company::class);
 
-    }
-    public function scopecheckGlobal($query, $role_module_id)
-    {
-        return $query->when(!auth()->user()->role_module_permission_via_action($role_module_id, 'global')->permission, function ($query) {
-            $query->where('created_by', auth()->user()->id);
-        });
-        // return $this;
     }
 
     // Agent order ownership (docs/HANDOVER.md §9.3): an agent owns the orders whose business_partner_id is
