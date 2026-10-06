@@ -108,6 +108,15 @@ _Refreshed 2026-09-24 (end of the Phase 1 follow-up session). Redesign status ad
   takes 35–55 minutes. Report the options with the risk of each (seeding once per run, per-test transactions,
   splitting the seeder) and explain the working-tree gap. Don't change the test setup while permission work is still
   in flight.
+  - **Correction (2026-10-06, measured): both clues above were wrong.** A timing probe run back-to-back in the
+    working tree and in the clean copy took the same time (43 s vs 42 s with Xdebug, 29 s vs 28 s without), so the
+    location isn't the cause; the same working-tree file had already taken 529, 809 and 1036 s on different runs,
+    which points to conditions during each run. And the city seeder takes about 1.5 s per seed;
+    `RolePermissionSeeder` takes about 20–23 s of the roughly 23–27 s (about 2,700 rows written one at a time with
+    `updateOrCreate`, each followed by `BaseModel`'s `setval` statement). Also measured: `migrate:fresh` once per run
+    12–15 s with Xdebug, 4–5 s without; Laravel's per-test start-up 0.1–0.3 s. The CLI PHP has Xdebug in `debug` mode
+    with `start_with_request=1` (every PHP process tries to attach to a debugger on port 9003) and no OPcache. The
+    options report follows these numbers.
 - **Standing rule:** report first; the user checks, then says "commit". Never commit, push, amend, reset or stash
   without that, and a described commit ("it must be its own commit") is not permission. No database writes; tests run
   only on `fleet_freak_testing`.
