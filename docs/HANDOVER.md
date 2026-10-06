@@ -75,6 +75,28 @@ header and sidebar. Presentation only, with no query, model or scoping changes. 
 PHPUnit 10.5 (was never installed before this program — `phpunit/phpunit`
 is in require-dev).
 
+**Standard way to run the tests (2026-10-06): with Xdebug off.**
+
+```
+php -d xdebug.mode=off vendor/bin/phpunit                                   # full suite
+php -d xdebug.mode=off vendor/bin/phpunit tests/Feature/SomeTest.php        # one file
+```
+
+Why, measured on 2026-10-06:
+- Laragon's PHP loads Xdebug in `debug` mode with `xdebug.start_with_request=1`, so every PHP process, test runs
+  included, tries to attach to a debugger on localhost:9003 at start-up.
+- With nothing listening, Xdebug still slows the run: `migrate:fresh` takes 12–15 s with it and 4–5 s without, and
+  the same timing probe took 42–43 s with it and 28–29 s without.
+- Whenever VS Code is listening for Xdebug, a whole test run runs under the debugger. This is the most likely reason
+  the same 6-test file took 529, 809 and 1036 s on different runs, and a 4.8-minute run elsewhere.
+- The `-d` flag affects only that one command. It changes nothing in the repo or in php.ini, and web debugging
+  keeps working. Switching php.ini to `start_with_request=trigger` would make it permanent; that is the user's call,
+  because it changes how the web app is debugged.
+
+**Correction (2026-10-06):** the "~15 minutes" and the city-seeder explanation above are out of date. The full suite
+now takes 35–55 minutes (60 tests). The city seeder costs about 1.5 s per seed; `RolePermissionSeeder` costs 20–23 s,
+and a full run seeds 41 times. See the test-speed note in §2.
+
 ---
 
 ## 2. Current state
@@ -117,6 +139,13 @@ _Refreshed 2026-09-24 (end of the Phase 1 follow-up session). Redesign status ad
     12–15 s with Xdebug, 4–5 s without; Laravel's per-test start-up 0.1–0.3 s. The CLI PHP has Xdebug in `debug` mode
     with `start_with_request=1` (every PHP process tries to attach to a debugger on port 9003) and no OPcache. The
     options report follows these numbers.
+  - **Decisions (user, 2026-10-06):** run tests with Xdebug off (§1, "Standard way to run the tests"). Option 2,
+    seeding once per run, is next: audit all 15 test files and report before changing any. Options 3 (a pre-built
+    test database) and 4 (skipping the cities, about 1.5 s per seed) are skipped. Option 5 (a faster
+    `RolePermissionSeeder`) is on hold: it is the seeder real installs run, so it isn't worth the risk now.
+  - **Option 2 audit done (2026-10-06, read-only):** see §10. No test file changed. **The change itself is on hold
+    (user, 2026-10-06): don't start it until the user says so.** The audit in §10 is complete enough to pick it up
+    later without redoing it.
 - **Standing rule:** report first; the user checks, then says "commit". Never commit, push, amend, reset or stash
   without that, and a described commit ("it must be its own commit") is not permission. No database writes; tests run
   only on `fleet_freak_testing`.
@@ -1399,3 +1428,59 @@ organization"):**
   unchanged.
 - Not in this work (reported only): delete user (broken), deactivate (no such feature), custom roles holding
   platform modules, the agent-approval role, `POST /api/register` (web focus).
+
+---
+
+## 10. Test speed: seed once per run (audit 2026-10-06, read-only; the change is on hold until the user says so)
+
+**How it would work.** Laravel's `RefreshDatabase` already runs `migrate:fresh` once per PHPUnit process (static
+`RefreshDatabaseState::$migrated`) and wraps every test in a transaction it rolls back. Setting `protected $seed =
+true;` makes that one `migrate:fresh` add `--seed`, so the seed is committed once and every test starts from it.
+The 19 `$this->seed()` calls (41 seeds per full run) would go.
+
+**Why it's safe.** Today every test already seeds into empty tables, because the previous test's seed was rolled
+back. So each test sees the same seeded state it would see after the change. Only two things differ:
+- 10 test cases that don't seed today would run on a seeded database: 8 in `ErrorPagesTest`, `SmokeLoginTest`'s
+  login-page test, and `MigrationSanityTest`. Checked: none assumes an empty table.
+- Seeded rows without explicit ids would keep the same id all run, instead of new ids per test (sequences aren't
+  rolled back). That makes things more stable, not less.
+
+**Per file** (seeds per run today in brackets):
+- Need the seeded admin, roles or company, and assert only on rows they create: `AgentDashboardTest` (1),
+  `AgentOrderOwnershipTest` (8, in setUp), `CompanySwitchTest` (2), `DeleteOneRecordTest` (4, in setUp; before/after
+  counts, so relative), `DriverLedgerAccessTest` (1; exact ledger values, for its own driver only),
+  `OrderIndexShowsApprovedTest` (1), `OrganizationIsolationMatrixTest` (1), `OrganizationIsolationTransactionsTest`
+  (1; also the seeded accounts), `PasswordManagementTest` (8, in setUp), `UserRoleManagementTest` (6, in setUp).
+- `EmployeeCreateTest` (2): asserts `role_id` 7 and `actor_id` 7. `UserRoleManagementTest` asserts `actor_id` 2.
+  Roles 1–8, actors 1–10, client 1, company 1 and the seeded users have **explicit ids** in `RolePermissionSeeder`,
+  so these are stable.
+- `RbacWebActionsTest` (4): uses `role_module_id` 3, an explicit `module_id` in the seeder, so stable. Its "already
+  seeded database" test deletes seeded permission-function rows and re-runs the
+  `2026_09_24_000001_register_rbac_web_actions` migration. All of it is plain inserts and deletes inside the test's
+  transaction (no DDL, `setval` or commit), so it rolls back.
+- `MigrationSanityTest` (0): schema checks only. Its comment ("RefreshDatabase runs migrate:fresh before this test")
+  is only true when it runs first; after the change it would also prove the seeder runs on a fresh database. Update
+  the comment.
+- `ErrorPagesTest` (1, only the `/unauthorized` test) and `SmokeLoginTest` (1 of 2): the non-seeding tests use test
+  routes and the login page and assume nothing about data.
+- `tests/Unit/OrganizationContextTest`: no database; unaffected.
+
+**`RandomDataSeeder`:** not random despite its name. Every write is `firstOrCreate` with fixed values (the
+testingagent and testingdriver users, Honda/Corolla, the Makkah and Madinah routes). No test uses its data.
+
+**Every seeder is idempotent** (`firstOrCreate`, `updateOrCreate`, `upsert`; the two `DB::table()->insert` calls are
+commented out). A leftover `$this->seed()` call would only waste about 25 s, not fail.
+
+**Nothing escapes a test's transaction today:** no seeder touches static or global state (organization context,
+auth, config); no app code opens a second connection, commits explicitly or uses raw PDO; `QUEUE_CONNECTION=sync`
+runs jobs inline.
+
+**Rules for the change:**
+- `$seed = true` goes in `tests/TestCase.php` only, never per class. Whichever class runs first decides for the whole
+  process.
+- Remove all 19 calls.
+- A future test that writes outside the transaction (a second connection, an explicit commit, a real queue) would
+  leak into later tests.
+- Running one file that doesn't need data (e.g. `ErrorPagesTest` alone) now pays one seed, about 25 s.
+
+**Expected gain:** about 40 fewer seeds per full run, at 23–27 s each: roughly 15–18 minutes.
