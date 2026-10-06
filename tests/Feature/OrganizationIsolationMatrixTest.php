@@ -17,8 +17,6 @@ class OrganizationIsolationMatrixTest extends TestCase
 
     public function test_users_only_see_their_own_organizations_data(): void
     {
-        $this->seed();
-
         $adminA = User::where('email', 'admin@idl.pk')->first();
 
         $companyB = Company::create([

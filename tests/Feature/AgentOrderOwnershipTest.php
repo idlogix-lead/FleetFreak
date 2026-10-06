@@ -41,7 +41,6 @@ class AgentOrderOwnershipTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->seed();
 
         $this->admin = User::where('email', 'admin@idl.pk')->first();
         $company = $this->admin->active_company_id;

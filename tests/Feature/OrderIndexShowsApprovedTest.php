@@ -20,8 +20,6 @@ class OrderIndexShowsApprovedTest extends TestCase
      */
     public function test_submitted_orders_are_listed_and_viewable(): void
     {
-        $this->seed();
-
         $admin = User::where('email', 'admin@idl.pk')->first();
 
         $agent = Partner::create([

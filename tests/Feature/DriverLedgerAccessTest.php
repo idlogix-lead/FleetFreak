@@ -29,8 +29,6 @@ class DriverLedgerAccessTest extends TestCase
 
     public function test_driver_ledger_access_per_role(): void
     {
-        $this->seed();
-
         $admin = User::where('email', 'admin@idl.pk')->first();
         $companyId = $admin->active_company_id;
 

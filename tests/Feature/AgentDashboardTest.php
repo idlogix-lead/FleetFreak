@@ -26,8 +26,6 @@ class AgentDashboardTest extends TestCase
 
     public function test_agent_dashboard_ledger_loads_and_stays_in_the_organization(): void
     {
-        $this->seed();
-
         $admin = User::where('email', 'admin@idl.pk')->first();
         $companyA = $admin->active_company_id;
 

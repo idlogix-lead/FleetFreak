@@ -80,7 +80,17 @@ is in require-dev).
 ```
 php -d xdebug.mode=off vendor/bin/phpunit                                   # full suite
 php -d xdebug.mode=off vendor/bin/phpunit tests/Feature/SomeTest.php        # one file
+php -d xdebug.mode=off vendor/bin/phpunit --order-by=random                 # random order; prints its seed
+php -d xdebug.mode=off vendor/bin/phpunit --order-by=random --random-order-seed=1791272288   # replay a seed
+php -d xdebug.mode=off vendor/bin/phpunit --order-by=reverse                # reverse order
 ```
+
+- **Run the full suite before every commit** (user, 2026-10-06). It takes about 40 seconds since tests seed once per
+  run (§10).
+- **Random or reverse order** catches a test that only passes because another one ran first; seeding once per run is
+  the kind of change that can hide that. A random run prints `Random Seed: N`; pass it back with
+  `--random-order-seed=N` to replay the same order. 1791272288 is the seed of the first verified random run
+  (2026-10-06: OK, 60 tests).
 
 Why, measured on 2026-10-06:
 - Laragon's PHP loads Xdebug in `debug` mode with `xdebug.start_with_request=1`, so every PHP process, test runs
@@ -96,6 +106,8 @@ Why, measured on 2026-10-06:
 **Correction (2026-10-06):** the "~15 minutes" and the city-seeder explanation above are out of date. The full suite
 now takes 35–55 minutes (60 tests). The city seeder costs about 1.5 s per seed; `RolePermissionSeeder` costs 20–23 s,
 and a full run seeds 41 times. See the test-speed note in §2.
+
+**Update (2026-10-06, after seeding once per run, §10):** the full suite takes about 40 seconds with Xdebug off.
 
 ---
 
@@ -146,9 +158,11 @@ _Refreshed 2026-09-24 (end of the Phase 1 follow-up session). Redesign status ad
   - **Option 2 audit done (2026-10-06, read-only):** see §10. No test file changed. **The change itself is on hold
     (user, 2026-10-06): don't start it until the user says so.** The audit in §10 is complete enough to pick it up
     later without redoing it.
+  - **Update (2026-10-06):** the user approved the change the same day; it's done. Results are in §10.
 - **Standing rule:** report first; the user checks, then says "commit". Never commit, push, amend, reset or stash
   without that, and a described commit ("it must be its own commit") is not permission. No database writes; tests run
-  only on `fleet_freak_testing`.
+  only on `fleet_freak_testing`. Since 2026-10-06: run the full suite (Xdebug off, about 40 s, §1) before every
+  commit, and report the result.
 - Branch: `moeen`. Commit history before 2026-09-29:
   `ff32402` first commit, `c734f18` bootstrap+docs, `721f238` Phase 0,
   `6e1ab1f` housekeeping, `daf4ac3` Phase 1, `0293bc5` handover,
@@ -1431,7 +1445,23 @@ organization"):**
 
 ---
 
-## 10. Test speed: seed once per run (audit 2026-10-06, read-only; the change is on hold until the user says so)
+## 10. Test speed: seed once per run (audit and change, 2026-10-06)
+
+**Done (2026-10-06, after the user lifted the hold):**
+- `tests/TestCase.php` sets `protected $seed = true;`, with a comment saying it belongs there only. All 19
+  `$this->seed()` calls are removed from 14 test files (exactly those 19 lines plus 8 blank lines; no other change).
+  The `MigrationSanityTest` comment now says the migrations and the seeder run once per run, before the first
+  database test.
+- **Verified, all with Xdebug off:** full suite twice in normal order (41 s and 41 s), once in random order (39 s,
+  `--order-by=random`, random seed 1791272288) and once in reverse order (39 s, `--order-by=reverse`). Every run:
+  OK, 60 tests, 441 assertions (442 before minus `UserRoleManagementTest`'s net one-assertion change in commit 2).
+  Before the change a full run took 35–55 minutes.
+- The roughly 17 s one-time migrate-and-seed lands on whichever database test runs first (AgentDashboardTest in
+  normal order, OrderIndexShowsApprovedTest in random, a UserRoleManagementTest test in reverse); every other test
+  takes 0.1–2 s. To replay the random run: `php -d xdebug.mode=off vendor/bin/phpunit --order-by=random
+  --random-order-seed=1791272288`.
+
+**The audit (read-only, before the change):**
 
 **How it would work.** Laravel's `RefreshDatabase` already runs `migrate:fresh` once per PHPUnit process (static
 `RefreshDatabaseState::$migrated`) and wraps every test in a transaction it rolls back. Setting `protected $seed =

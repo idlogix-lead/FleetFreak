@@ -126,7 +126,6 @@ class ErrorPagesTest extends TestCase
 
     public function test_unauthorized_page_matches_the_error_pages(): void
     {
-        $this->seed();
         $admin = User::where('email', 'admin@idl.pk')->first();
 
         $html = $this->actingAs($admin)->get('/unauthorized')->assertOk()->getContent();

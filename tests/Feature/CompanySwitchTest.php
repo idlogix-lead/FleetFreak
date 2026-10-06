@@ -19,8 +19,6 @@ class CompanySwitchTest extends TestCase
      */
     public function test_user_can_switch_active_company_within_their_membership(): void
     {
-        $this->seed();
-
         $user = User::where('email', 'admin@idl.pk')->first();
         $this->assertNotNull($user);
 
@@ -51,8 +49,6 @@ class CompanySwitchTest extends TestCase
      */
     public function test_user_cannot_switch_to_a_company_they_do_not_belong_to(): void
     {
-        $this->seed();
-
         $user = User::where('email', 'admin@idl.pk')->first();
         $originalActiveCompanyId = $user->active_company_id;
 

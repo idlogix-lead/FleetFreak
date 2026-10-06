@@ -27,7 +27,6 @@ class DeleteOneRecordTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->seed();
         $this->admin = User::where('email', 'admin@idl.pk')->first();
     }
 

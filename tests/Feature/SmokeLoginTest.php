@@ -24,8 +24,6 @@ class SmokeLoginTest extends TestCase
      */
     public function test_seeded_admin_can_log_in_and_reach_the_dashboard(): void
     {
-        $this->seed();
-
         $response = $this->post('/login', [
             'email' => 'admin@idl.pk',
             'password' => '00000000',

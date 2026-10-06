@@ -11,10 +11,11 @@ class MigrationSanityTest extends TestCase
     use RefreshDatabase;
 
     /**
-     * RefreshDatabase runs migrate:fresh against fleet_freak_testing before this
-     * test — the fact that we got here at all proves the full migration chain
-     * runs cleanly on a fresh database (including the guarded duplicate-column
-     * breaker in 2025_02_18_105450_add_fields_in_invoices.php).
+     * RefreshDatabase runs migrate:fresh --seed against fleet_freak_testing once
+     * per run, before the first database test (not necessarily this one) — the
+     * fact that we got here at all proves the full migration chain and the
+     * DatabaseSeeder run cleanly on a fresh database (including the guarded
+     * duplicate-column breaker in 2025_02_18_105450_add_fields_in_invoices.php).
      */
     public function test_the_full_migration_chain_runs_and_core_tables_exist(): void
     {

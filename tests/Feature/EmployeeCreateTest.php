@@ -39,7 +39,6 @@ class EmployeeCreateTest extends TestCase
 
     public function test_admin_can_create_and_edit_an_employee(): void
     {
-        $this->seed();
         $admin = User::where('email', 'admin@idl.pk')->first();
 
         // Create, without a login.
@@ -76,7 +75,6 @@ class EmployeeCreateTest extends TestCase
 
     public function test_driver_fields_are_still_written_when_sent(): void
     {
-        $this->seed();
         $admin = User::where('email', 'admin@idl.pk')->first();
         $this->actingAs($admin);
 

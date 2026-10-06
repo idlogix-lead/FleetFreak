@@ -40,7 +40,6 @@ class RbacWebActionsTest extends TestCase
 
     public function test_admin_can_download_every_module_export(): void
     {
-        $this->seed();
         Excel::fake();
         $admin = User::where('email', 'admin@idl.pk')->first();
 
@@ -53,7 +52,6 @@ class RbacWebActionsTest extends TestCase
 
     public function test_customer_export_is_organization_and_agent_scoped(): void
     {
-        $this->seed();
         Excel::fake();
         $admin = User::where('email', 'admin@idl.pk')->first();
         $companyA = $admin->active_company_id;
@@ -99,7 +97,6 @@ class RbacWebActionsTest extends TestCase
 
     public function test_vehicle_class_details_and_delete_row_are_reachable(): void
     {
-        $this->seed();
         $admin = User::where('email', 'admin@idl.pk')->first();
 
         $class = VehicleClass::create([
@@ -130,7 +127,6 @@ class RbacWebActionsTest extends TestCase
 
     public function test_migration_registers_the_actions_on_an_already_seeded_database(): void
     {
-        $this->seed();
         $admin = User::where('email', 'admin@idl.pk')->first();
 
         // Simulate a database seeded before the registration existed.

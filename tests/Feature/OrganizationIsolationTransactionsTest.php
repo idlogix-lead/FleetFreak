@@ -23,8 +23,6 @@ class OrganizationIsolationTransactionsTest extends TestCase
 
     public function test_transaction_tables_ledger_and_exports_are_isolated(): void
     {
-        $this->seed();
-
         $adminA = User::where('email', 'admin@idl.pk')->first();
 
         $companyB = Company::create([

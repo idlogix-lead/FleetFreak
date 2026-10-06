@@ -36,7 +36,6 @@ class PasswordManagementTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->seed();
 
         $this->owner = User::where('email', 'admin@idl.pk')->first();
         $this->superAdmin = User::where('is_super_admin', 1)->firstOrFail();
