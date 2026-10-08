@@ -174,7 +174,12 @@ _Refreshed 2026-09-24 (end of the Phase 1 follow-up session). Redesign status ad
   an inspection checklist (it adds blank rows to the toll and fuel forms).
 - **2026-10-08, maintenance step 1 (user's request):** vendors in the maintenance Business Partner drop-down, listed
   first; the other partner types stay for now (the user will remove them later). The server accepts only partners the
-  drop-down offers. Six more maintenance-create issues found (MNT-13 to MNT-18). Details in §11.11.
+  drop-down offers. Six more maintenance-create issues found (MNT-13 to MNT-18). Details in §11.11. Committed
+  (`5f6a7d9`), not pushed.
+- **2026-10-08, Trial Balance report fixed (user's request):** it always failed on PostgreSQL ("Error executing SQL
+  statement") and, with dates, hid accounts that had no entry before the start date. Its controller now passes only
+  validated dates. **Open security finding:** the other three Jasper reports pass every query-string value into a
+  shell command (command injection for any logged-in user). Details in §11.12.
 - **Standing rule:** report first; the user checks, then says "commit". Never commit, push, amend, reset or stash
   without that, and a described commit ("it must be its own commit") is not permission. No database writes; tests run
   only on `fleet_freak_testing`. Since 2026-10-06: run the full suite (Xdebug off, about 40 s, §1) before every
@@ -2036,3 +2041,51 @@ removed later):
   `$vehicle->vehicleModel->name` (`maintenance/form.blade.php:28`); `vehicles.vehicle_model_id` is nullable. Fix: a
   null-safe label.
 - **MNT-18 · Low: an end time before the start time is accepted.** Fix: `after:start_time`, as for INSP-08.
+
+### 11.12 2026-10-08: Trial Balance report fixed; command injection in the Jasper reports
+
+Reports → Trial Balance (`/jasper/report/trial_balance_two_column_FF/html`, module 48, admin) is a Jasper report run by
+PHPJasper/JasperStarter (Java 8 on this machine; JDBC `postgresql-42.2.9.jar` in
+`vendor/geekcom/phpjasper/bin/jasperstarter/jdbc`). The user's browser test of MNT-0005 posted correctly, but the
+report showed nothing, then "Error filling report Error executing SQL statement for: Trial Balance".
+
+**Causes** (PostgreSQL log `D:\PostgreSql\log`, and JasperStarter run by hand against the dev DB, read-only):
+- JasperStarter binds the String `start_date`/`end_date` parameters as varchar, and the query compared them with
+  `transaction_date` (a date): `operator does not exist: date < character varying`. It never worked on PostgreSQL
+  (it looks written for MySQL).
+- With dates that work, an account showed only if it had an entry before the start date: the opening-balance
+  subquery took `account_id` from the transactions side (NULL without earlier entries), and the period and closing
+  amounts are joined on it. “This Month” showed only the 25 Sep ride accounts; “This Year” nothing.
+- With no date range the parameters fell back to 2011-02-28: everything 0.
+
+**Change:**
+- `trial_balance_two_column_FF.jrxml`: `CAST($P{…} AS date)` in the three date conditions; `acct.id` as `account_id`
+  in the opening and closing subqueries. Recompiled to `storage/app/report/compiled/trial_balance_two_column_FF.jasper`
+  with `jasperstarter compile`.
+- `trial_balance_two_column_FFReportController`: `params()` builds the four parameters itself (client and company
+  from the logged-in user, dates from `filter_date_range` only when it is a valid `YYYY-MM-DD - YYYY-MM-DD` range;
+  otherwise this year). It no longer uses `read_filter_fields()`.
+- Checked end to end with JasperStarter on the dev DB: the old compiled report gives the user's exact error; the new
+  one shows, for 2026, Maintenance Expense 975, Toll Expenses 500, Accounts Payable 1,475, Accounts Receivable 200,
+  Ride Revenue 200, totals 1,675 / 1,675; “This Month” now shows them too (opening 200 / 200).
+- `tests/Feature/TrialBalanceReportTest.php`: 2 tests, 11 assertions. Test 1 runs the report's SQL from the `.jrxml` on
+  the test DB, binding the dates as varchar the way JasperStarter does. On the old query it fails with the user's error;
+  with only the date cast it fails on the missing period amount (so it catches both bugs). Test 2 checks `params()`:
+  a valid range passes; no filter, an impossible date, a reversed range or a range with extra characters gives this
+  year. On the old code it errors because the method didn't exist; the old code passed every query-string key and
+  value through. Full suite with Xdebug off: OK, 74 tests, 512 assertions, normal (51 s) and random order (seed
+  1791441425).
+
+**Open, not fixed: command injection through the other Jasper reports (Critical, security).** `PHPJasper::process()`
+writes each report parameter into the shell command as `key="value"` without escaping
+(`vendor/geekcom/phpjasper/src/PHPJasper.php:142-147`), then `exec()`s it. `JasperReportsController::read_filter_fields()`
+returns every query-string key and value. `users`, `user_filter` and `testingusers` (the other entries in
+`JasperController::ALLOWED_REPORTS`) still use it, and `JasperController::report` only requires a login (the
+per-report `RolePermissions` middleware never runs, because the controllers are called statically). So any logged-in
+user can put shell commands in a query-string value of those report URLs. Not exercised. Fix: build each report's
+parameters explicitly as the Trial Balance now does, or escape centrally in `read_filter_fields()` (keys must be
+identifiers; values from a strict allow-list) — or remove those three test reports from the allow-list.
+
+**Also seen, not investigated:** `storage/logs/laravel.log` has “Cannot redeclare is_active_route() (previously
+declared in app/helpers.php:5)” every minute since 2026-09-14 (7,000+ entries): a scheduled process fails on every
+run.

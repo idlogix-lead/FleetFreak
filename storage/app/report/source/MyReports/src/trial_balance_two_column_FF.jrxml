@@ -29,7 +29,7 @@ FROM
 
 /* Opening Balance */
 
-( 	SELECT account_id, value, name, CASE WHEN balance > 0  THEN ABS(balance) ELSE 0 END balancedr_open,
+( 	SELECT acct.id account_id, value, name, CASE WHEN balance > 0  THEN ABS(balance) ELSE 0 END balancedr_open,
 	CASE WHEN balance < 0  THEN ABS(balance) ELSE 0 END balancecr_open
 
 FROM
@@ -38,7 +38,7 @@ FROM
 
 FROM account_transactions tr
 
-WHERE tr.company_id = $P{company_id} AND tr.transaction_date < $P{start_date}
+WHERE tr.company_id = $P{company_id} AND tr.transaction_date < CAST($P{start_date} AS date)
 
 GROUP BY tr.account_id)amt
 
@@ -67,7 +67,7 @@ FROM
 
 FROM account_transactions tr
 
-WHERE  tr.company_id = $P{company_id} AND tr.transaction_date BETWEEN $P{start_date} AND $P{end_date}
+WHERE  tr.company_id = $P{company_id} AND tr.transaction_date BETWEEN CAST($P{start_date} AS date) AND CAST($P{end_date} AS date)
 
 GROUP BY tr.account_id)amt
 
@@ -92,7 +92,7 @@ LEFT JOIN
 
 /* Closing Balance */
 
-(SELECT account_id, value, name, CASE WHEN balance > 0 THEN ABS(balance) ELSE 0 END balancedr_close, 	CASE WHEN balance < 0  THEN ABS(balance) ELSE 0 END balancecr_close
+(SELECT acct.id account_id, value, name, CASE WHEN balance > 0 THEN ABS(balance) ELSE 0 END balancedr_close, 	CASE WHEN balance < 0  THEN ABS(balance) ELSE 0 END balancecr_close
 
 
 FROM
@@ -101,7 +101,7 @@ FROM
 
 FROM account_transactions tr
 
-WHERE  tr.company_id = $P{company_id}  AND tr.transaction_date <= $P{end_date}
+WHERE  tr.company_id = $P{company_id}  AND tr.transaction_date <= CAST($P{end_date} AS date)
 
 GROUP BY tr.account_id)amt
 
