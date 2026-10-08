@@ -182,7 +182,11 @@ _Refreshed 2026-09-24 (end of the Phase 1 follow-up session). Redesign status ad
   shell command (command injection for any logged-in user). Details in §11.12. Committed and pushed (`ae88e3a`).
 - **2026-10-08, maintenance step 2 (user's request):** the Maintenance list shows drafts and pending documents (a
   saved draft used to vanish), Delete only on drafts with an error when nothing is deleted, and editing a draft saves
-  its times (MNT-06, MNT-07, MNT-08). Details in §11.13.
+  its times (MNT-06, MNT-07, MNT-08). Details in §11.13. Committed and pushed (`4c9d8de`).
+- **2026-10-08, "Cannot redeclare is_active_route()" explained and fixed (user's request):** it came from a VS Code
+  extension on the dev machine, not from the app or a scheduler. `app/helpers.php` now guards every definition;
+  `laravel.log` was saved to `D:\laragon\backups\laravel_before_clear_2026-10-08.log` and cleared. It never blocked
+  scheduling; the production cron question is still open (§5). Details and a debugging note in §12.
 - **Standing rule:** report first; the user checks, then says "commit". Never commit, push, amend, reset or stash
   without that, and a described commit ("it must be its own commit") is not permission. No database writes; tests run
   only on `fleet_freak_testing`. Since 2026-10-06: run the full suite (Xdebug off, about 40 s, §1) before every
@@ -530,6 +534,14 @@ Pre-existing, unrelated to this program (noticed during verification):
   minute, and earlier "Cannot declare class App\Models\DriverAssignment"
   (duplicate class name in `BulkPayment.php`, per KB §13). These fire on
   external scheduler ticks. Investigate when convenient.
+  - **Correction (2026-10-08): not a scheduler.** Both errors come from the VS Code extension Laravel Extra
+    Intellisense, which boots the app with `php -r` every minute and loads every `app/*.php` and `app/Models/*.php`
+    file. The `is_active_route()` one is fixed (guards in `app/helpers.php`); the `DriverAssignment` one is the unused
+    `app/Models/BulkPayment.php`, still open. See §12.
+- **Production scheduler (open, unverified; recorded 2026-10-08).** Whether the production server runs Laravel's
+  scheduler (a `schedule:run` cron or `schedule:work`; `app:send-email-notifications` is scheduled every second and
+  registration emails depend on it) has not been checked. It was never related to the "Cannot redeclare
+  is_active_route()" error, which came from the editor (§12).
 - **GitHub push blocked**: 403 for `moeenidl` on
   `idlogix-lead/FleetFreak`. Client must fix access; then push `moeen`.
 - **"Format on save" produces huge noise diffs (2026-09-30).** `DashboardController.php`, `routes/web.php` and
@@ -2095,6 +2107,8 @@ identifiers; values from a strict allow-list) — or remove those three test rep
 **Also seen, not investigated:** `storage/logs/laravel.log` has “Cannot redeclare is_active_route() (previously
 declared in app/helpers.php:5)” every minute since 2026-09-14 (7,000+ entries): a scheduled process fails on every
 run.
+- **Correction (2026-10-08): not a scheduled process.** It was the VS Code extension Laravel Extra Intellisense on the
+  dev machine; fixed in `app/helpers.php`. See §12.
 
 ### 11.13 2026-10-08: maintenance step 2, drafts in the list (MNT-06, MNT-07, MNT-08)
 
@@ -2115,3 +2129,63 @@ as drafts are listed.
   Delete only on drafts; deleting a pending document is refused and a draft is soft-deleted; editing a draft saves its
   times). Against the old code (HEAD `ae88e3a`) all 4 fail. Full suite with Xdebug off: OK, 78 tests, 533 assertions,
   normal (57 s) and random order (seed 1791452416).
+
+## 12. "Cannot redeclare is_active_route()": the editor, not the app (2026-10-08)
+
+`storage/logs/laravel.log` had this fatal once a minute since 2026-09-14: 7,285 entries (1,001 from the old
+`C:\laragon` location, 6,024 from `D:`, 260 at line 8 of an older `helpers.php`). §5 and §11.12 called it a scheduler;
+that was wrong (dated corrections are beside them).
+
+**Cause.**
+- `is_active_route()` is defined once, in `app/helpers.php`, which Composer loads once per process through
+  `autoload.files` (`composer.json`). The log's “previously declared in helpers.php:5 … at helpers.php:6” means the
+  same file was loaded twice in one process.
+- The second load came from the VS Code extension **Laravel Extra Intellisense** (`amiralizadeh9480`, v0.7.4). Its
+  auth provider runs `loadAbilities()` at start and every 60 s; that calls `getModels()`, which boots the app with
+  `php -r "require_once '<project>/vendor/autoload.php'; $app = require_once '<project>/bootstrap/app.php'; …"`, builds
+  a class name from every file in `app/*` and `app/Models/*`, and calls `class_exists()` on each.
+- For `app/helpers.php` the name is `App\helpers`. Composer's PSR-4 autoloader maps `App\` to `app/` and loads the file
+  again with a plain `include`, so every function in it is declared a second time.
+- **Why never on web requests:** nothing in the app asks the autoloader for a class `App\helpers`, and Composer's
+  `files` loading has its own once-only guard. It ran through Laravel's console kernel, which is why Laravel's handler
+  logged it with no URL or user. **It never blocked scheduling:** no scheduled task runs on this machine (Windows Task
+  Scheduler and the Laragon Procfile have none). Whether production runs the scheduler is a separate, still open
+  question (§5).
+
+**Fix.** Every definition in `app/helpers.php` is wrapped in `if (! function_exists(…))`, and the constant in
+`if (! defined('CURRENCY_POSITION'))` (Laravel's own helpers do the same). The constant guard matters: a second
+`define()` is a warning, which Laravel turns into an exception. A second load is now harmless, and
+`class_exists('App\helpers')` returns false. No `composer.json` change, no `dump-autoload`, no change in behaviour.
+
+**Test.** `tests/Unit/HelpersDoubleLoadTest.php` runs a separate PHP process (a redeclared function would end PHPUnit
+itself) with warnings turned into exceptions, loads the autoloader, calls `class_exists('App\helpers')` and checks the
+helpers still work. Against the old code (HEAD `4c9d8de`) the process exits 255 with “Cannot redeclare
+is_active_route()”; with the function guards but no constant guard it fails on “Constant CURRENCY_POSITION already
+defined”. Full suite with Xdebug off: OK, 79 tests, 535 assertions, normal (57 s) and random order (seed 1791456591).
+
+**After the fix:** the last entry was 15:45:17 and the fix landed at 15:45:52; no new entry in the next five minutes
+while the extension kept running. `laravel.log` (12.2 MB) was copied to
+`D:\laragon\backups\laravel_before_clear_2026-10-08.log` (hash checked) and then cleared, at the user's request.
+
+**Still open: `app/Models/BulkPayment.php`.** It declares `class DriverAssignment` (a stale copy of
+`DriverAssignment.php`; nothing in the app references `App\Models\BulkPayment`, so web requests never load it). The
+extension's `loadModels()` `include_once`s every `app/Models/*.php` file when one changes, then hits “Cannot declare
+class App\Models\DriverAssignment”: 101 entries since 2026-09-14, the last at 15:45:59, set off by the `helpers.php`
+edit itself. Fix when the user says: delete the stale file (or give it its own class).
+
+### 12.1 Debugging note: a log full of one error every minute may be the editor
+
+On a dev machine, a Laravel log with the same error once a minute, no URL and no user, may come from an editor
+extension, not the app or a scheduler. What found it:
+1. Read the whole log entry: “previously declared in X:5 … at X:6” with the same file means one process loaded that
+   file twice.
+2. Look for a timer: no Windows scheduled task (`schtasks /query /fo CSV /v`), no Laragon Procfile entry, and the
+   entries started the day the project was first opened in VS Code.
+3. Check editor extensions that run PHP: `%USERPROFILE%\.vscode\extensions` (here `laravel-extra-intellisense`). Search
+   its bundled JavaScript for `php -r`, `setInterval`, `require_once` and `class_exists` to see what it runs and how
+   often.
+4. Reproduce it in a terminal with the same steps, read-only:
+   `php -r "require_once 'd:\laragon\www\FleetFreak/vendor/autoload.php'; $app = require_once
+   'd:\laragon\www\FleetFreak/bootstrap/app.php'; var_dump(class_exists('App\helpers'));"`. Before the fix this
+   printed the exact log message; after it, `bool(false)`.
+5. After a fix, watch the log for a few minutes with the editor open: the entries should stop.
