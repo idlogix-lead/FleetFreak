@@ -161,6 +161,17 @@ _Refreshed 2026-09-24 (end of the Phase 1 follow-up session). Redesign status ad
     (user, 2026-10-06): don't start it until the user says so.** The audit in §10 is complete enough to pick it up
     later without redoing it.
   - **Update (2026-10-06):** the user approved the change the same day; it's done. Results are in §10.
+- **2026-10-07, dev DB `fleet_freak` migrated (user's request):** 12 migrations had never run there (165 files, 154
+  recorded), including `2025_02_22_000802` (`partners.price_list_id`, so vendor create always failed) and the Phase 1
+  `2026_09_22` indexes and `2026_09_24` RBAC web actions. Previewed with `migrate --pretend` first; backup taken with
+  PostgreSQL 17 `pg_dump` to `D:\laragon\backups\fleet_freak_before_migrate_2026-10-07.dump`. Accepted loss:
+  `2025_02_18_162610` drops and re-adds `invoices.vehicle_id`, so the user's 3 test maintenance documents
+  (MNT-0001..0003) no longer have a vehicle. Now 0 pending. Tests never catch this (the test DB migrates fresh), so
+  check `php artisan migrate:status` on any server before deploying.
+- **2026-10-07, invoice documents review (read-only, nothing fixed):** maintenance, toll tax, fuel expense and
+  inspection. 42 issues with IDs, 8 decisions for the user, and a fix order in §11 (the user also has the same
+  findings as a Word file, kept outside the repo). Fixes wait for the user's choice. Until X-07 is fixed, don't create
+  an inspection checklist (it adds blank rows to the toll and fuel forms).
 - **Standing rule:** report first; the user checks, then says "commit". Never commit, push, amend, reset or stash
   without that, and a described commit ("it must be its own commit") is not permission. No database writes; tests run
   only on `fleet_freak_testing`. Since 2026-10-06: run the full suite (Xdebug off, about 40 s, §1) before every
@@ -1547,3 +1558,437 @@ runs jobs inline.
 - Running one file that doesn't need data (e.g. `ErrorPagesTest` alone) now pays one seed, about 25 s.
 
 **Expected gain:** about 40 fewer seeds per full run, at 23–27 s each: roughly 15–18 minutes.
+
+## 11. Invoice documents review: maintenance, toll tax, fuel, inspection (2026-10-07, read-only, not fixed)
+
+Read-only research into the four document types stored in `invoices`: maintenance (type 1, `MNT-`), toll tax (2,
+`TOLL-`), fuel expense (3, `FUEL-`) and inspection (5, `Insp-`). Code at `a1bdd06`; read-only queries on the dev DB
+`fleet_freak`. Nothing was changed. 42 issues: 6 Critical, 11 High, 14 Medium, 11 Low; 8 decisions for the user. Each
+has an ID (MNT-, TOLL-, FUEL-, INSP-, X- for shared); fix them one at a time in the order of §11.9.
+
+**Word copy:** the same findings with tick boxes, for sharing and printing, were given to the user as
+`INVOICE_DOCUMENTS_REVIEW.docx`; it is kept outside the repo. It is a snapshot of 2026-10-07: this section is the
+record, so when an item is fixed or corrected, record it here.
+
+Severity: **Critical** wrong or missing accounting, data loss, or a main action that always fails; **High** broken
+feature, security gap, or data saved wrongly; **Medium** wrong behaviour with a workaround, misleading messages,
+latent problems; **Low** cosmetic or clean-up.
+
+### 11.1 Summary
+
+| Document | Who can use it (web) | Approval | Accounting on completion | Works today? |
+| --- | --- | --- | --- | --- |
+| Maintenance (`MNT-`, 1) | admin, driver, vehicle_manager; approvals admin | Yes (Maintenance Approvals) | Dr Maintenance Expense / Cr Accounts Payable | Create, approve, complete work. Cancel crashes; drafts vanish; double posting possible. |
+| Toll tax (`TOLL-`, 2) | admin | No, completed directly | Dr Toll Expenses / Cr Accounts Payable, no partner | Create as Completed works. Draft → Completed posts nothing; adding a row on edit crashes. |
+| Fuel expense (`FUEL-`, 3) | admin | No, completed directly | Dr Fuel Expenses / Cr Accounts Payable (intended) | Draft works. Completed crashes and posts nothing. |
+| Inspection (`Insp-`, 5) | any logged-in user (no permission check) | No | None (total always 0) | Create works. A draft can't be saved again; maintenance link lost; scheduling off. |
+
+| Area | Critical | High | Medium | Low | Total |
+| --- | --- | --- | --- | --- | --- |
+| Maintenance | 2 | 3 | 4 | 3 | 12 |
+| Toll tax | 1 | 2 | 1 | 0 | 4 |
+| Fuel expense | 2 | 0 | 1 | 2 | 5 |
+| Inspection | 1 | 2 | 4 | 4 | 11 |
+| Shared | 0 | 4 | 4 | 2 | 10 |
+| **Total** | **6** | **11** | **14** | **11** | **42** |
+
+Most important:
+- **Accounting incomplete or wrong in four places:** fuel completion crashes (FUEL-01); toll and fuel completed from
+  Edit never post (TOLL-01, FUEL-02); maintenance can be completed and posted twice (MNT-02).
+- **Accounts Payable has no real creditor:** vendors can't be chosen on any of the four forms, so payables are booked
+  against agents, drivers or nobody (X-01, TOLL-02). No vendor ledger or vendor payment (X-02).
+- **Security:** inspections have no permission check (INSP-03); uploaded toll and fuel files aren't checked (X-05).
+- **Inspection workflow cut in two places:** a draft can't be saved again (INSP-01); the link to the maintenance it
+  creates is lost (INSP-02).
+- **Don't create an inspection checklist yet:** it adds blank required rows to every new toll and fuel form (X-07).
+  Fix X-07 first. (The 2026-10-07 chat advice to create one came before this was found.)
+
+### 11.2 Shared background
+
+- All four types are rows in `invoices` + `invoice_lines` (products on maintenance and inspection lines in
+  `invoice_line_products`). Numbers run per organization (`Invoice::generate_document_no1`).
+  `invoices.document_status` has a CHECK allowing only `draft`, `pending`, `completed`. `Invoice` and `Partner` use
+  the organization scope.
+- Postings: `AccountTransaction::createTransaction($date, $company_id, $debit, $credit, $quantity = 1, $amount,
+  $currency_id, $record_id, $line_id, $description, $table_id, $business_partner_id)` writes a debit and a credit row;
+  invoices use `table_id` 51, `record_id` = invoice id. Accounts are found **by name**: Maintenance Expense
+  (EXP-CO-2), Toll Expenses (EXP-CO-4), Fuel Expenses (EXP-CO-1), Accounts Payable (LI-CL-1). Postings show in the
+  Trial Balance and the Financial dashboard, not in any ledger.
+- Permissions (dev DB): Maintenance 35 and Inspection 44 — admin, driver, vehicle_manager (all actions); Approvals 48,
+  Toll 37, Fuel 38, Maintenance Activity 33 — admin. Inspection never applies the middleware (INSP-03).
+- Partner drop-downs: `BusinessPartnerDropdownSimple` (maintenance, approvals, inspection) and
+  `BusinessPartnerDropdownIncludeDriver` (toll, fuel) list agents, drivers, customers, walk-ins (actors 4, 5, 6, 8)
+  for admins; never vendors (actor 10).
+- Mobile: `Api/TollTaxController` and `Api/FuelExpenseController` call the same `Invoice` methods, so model fixes
+  change mobile behaviour too (not endpoints or response shapes). Say so in each report. Maintenance and inspection
+  have no mobile endpoints.
+
+### 11.3 Maintenance (type 1)
+
+- Flow: Create (`/maintenances/create` → `Invoice::store_maintainence`; “Save as Draft” → draft, “Complete” →
+  **pending**) → list (`/maintenances`, pending only) → edit (drafts only) → Maintenance Approvals
+  (`/maintenance_approvals`, admin; opens pending only; Complete / Cancel) → `Invoice::update_maintainence_status`
+  sets completed and posts. From a completed inspection: `PATCH /maintainence/create/{id}` opens the create form with
+  its vehicle and partner.
+- Completion writes only: `UPDATE invoices` (status, `updated_by`) and two postings (Dr Maintenance Expense / Cr
+  Accounts Payable, header `grand_total_amount` as sent by the browser, dated the approval day, the document's
+  partner). Nothing on the vehicle, no next service, no stock movement, no payable settlement, no undo.
+
+- **MNT-01 · Critical · needs D-1: Cancel always crashes.** Maintenance Approvals → Cancel saves the status
+  `cancelled`, but the database only allows `draft`, `pending` and `completed`. Evidence:
+  `resources/views/maintenance-approvals/form.blade.php:391-392` sets `cancelled`. Database constraint on
+  `invoices.document_status`: CHECK (draft, pending, completed). Effect: Every Cancel returns a 500 error. A pending
+  maintenance can't be rejected. Fix: Decision D-1: add `cancelled` to the CHECK constraint (a migration; the list
+  views already show a red “Cancelled” badge), or map Cancel to an allowed status such as `draft`. Test: Approver
+  cancels a pending maintenance → status is cancelled (or draft), no postings created.
+- **MNT-02 · Critical: Completing twice posts twice.** The approval `update` does not check that the document is still
+  pending (only `edit` checks it). A second submit — double click, browser back, or a hand-made request — completes it
+  again. Evidence: `app/Http/Controllers/MaintenanceApprovalsController.php:127-159` (no status check). `edit` has the
+  check at line 95; posting happens in `app/Models/Invoice.php:723-730`. Effect: Duplicate Dr Maintenance Expense / Cr
+  Accounts Payable rows. Expenses and payables are overstated. `accounting:audit` flags more than 2 rows per document.
+  Fix: In `update`, load the document with `document_type_id = 1` and `document_status = pending` (findOrFail → 404
+  otherwise). Post only on the pending → completed change. Fix together with MNT-03 and MNT-04. Test: Complete once →
+  2 rows. Submit again → refused, still 2 rows.
+- **MNT-03 · High: Approval can complete any invoice type as maintenance.** The approval `update` finds the invoice by
+  id and organization only, not by document type. Evidence: `MaintenanceApprovalsController.php:132-133`. Effect:
+  Sending a toll, fuel, inspection or purchase invoice id to this endpoint marks it completed and posts a Maintenance
+  Expense entry. Fix: Same guard as MNT-02 (`document_type_id = 1`). Fix together with MNT-02. Test: Submit a toll
+  invoice id to the approval endpoint → 404, nothing posted.
+- **MNT-04 · High: Status change and posting are not in one transaction.** The status is saved as completed first;
+  then the accounts are looked up by name and the posting is written. If posting fails (an account renamed or missing
+  → null `->id`), the document stays completed with no journal. Evidence: `app/Models/Invoice.php:665-730`
+  (`update_maintainence_status`). Effect: Completed documents with no accounting entry, and nothing shows it. Fix:
+  Wrap status change + posting in `DB::transaction`; fail clearly when a system account is missing. Long term see
+  X-06. Test: Rename “Maintenance Expense” in the test DB → completion fails and the status stays pending.
+- **MNT-05 · Medium · needs D-2: Posting date is the approval day, not the maintenance date.** The journal is dated
+  with `now()` when the approver clicks Complete. Evidence: `Invoice.php:728`. Dev DB: MNT-0001 is dated 2026-10-07
+  but posted on 2026-10-06. Effect: The expense lands in the wrong month when approval happens later. Fix: Decision
+  D-2: post on the document date (usual) or keep the approval date. Test: Maintenance dated last month, approved today
+  → transaction date follows D-2.
+- **MNT-06 · High: Saved drafts disappear from the list.** The Maintenance list shows only pending documents, but only
+  drafts can be edited or deleted. Evidence: `app/Http/Controllers/MaintenanceController.php:68`
+  (`whereIn('document_status', ['pending'])`). Effect: A saved draft can't be found again in the UI (dev: MNT-0002).
+  Fix: List draft and pending (completed read-only, or via a status filter). Test: Save a draft → it appears in the
+  list with Edit and Delete.
+- **MNT-07 · Medium: Delete on a pending row says “deleted” but deletes nothing.** The list shows Delete on every row.
+  `destroy` deletes drafts only but always answers “deleted successfully”. Evidence: `MaintenanceController.php:523+`
+  (`destroy`), `resources/views/maintenance/index.blade.php` action column. Effect: Users think a document was removed
+  when it wasn't. Fix: Show Delete on drafts only; return an error message when nothing was deleted. Test: Delete a
+  pending maintenance → error message, row still there.
+- **MNT-08 · Medium: Editing a draft loses start and end time.** `update` doesn't validate or save `start_time` and
+  `end_time`. Evidence: `MaintenanceController.php:383+` (`update` rules have no times; `store` has them at 173-174).
+  `Invoice.php:579-592` (`update_maintainence` doesn't write them). Effect: Times entered while editing are dropped;
+  wrong times can't be corrected. Fix: Validate and save both fields in `update`. Test: Edit a draft's times → new
+  times saved.
+- **MNT-09 · Low: Approval routes without controller methods.** `Route::resource('maintenance_approvals', …)`
+  registers create, store and show, but the controller has no such methods. Evidence: `routes/web.php:152`;
+  `MaintenanceApprovalsController.php` has index, edit, update, destroy and destroy_row — no create, store or show.
+  Effect: Opening those URLs gives a 500 error. They are not linked in the UI. Fix: Limit the resource route with
+  `->only(['index', 'edit', 'update', 'destroy'])`. Test: GET /maintenance_approvals/create → 404.
+- **MNT-10 · Medium · needs D-4: Drivers and vehicle managers have full maintenance rights.** On the dev DB the driver
+  and vehicle_manager roles hold Maintenance (module 35) and Inspection (module 44) with create, read, update, delete
+  and global. The controllers have no owner rule. Evidence: `role_permissions` rows for modules 35 and 44 (dev DB,
+  2026-10-07). Effect: A driver can see, edit and delete any maintenance draft in the organization; vehicle managers
+  are not limited to their vehicles. Fix: Decision D-4: what “own” means (own vehicle? created by me?). Then add a
+  rule like `checkGlobal`. Test: Driver A can't open driver B's maintenance draft.
+- **MNT-11 · Low: No way to reverse a completed maintenance.** Approvals hide Edit for completed documents;
+  maintenance edit and delete work on drafts only. Evidence: Maintenance Approvals list;
+  `MaintenanceController@destroy`. Effect: The only correction is a manual GL journal, which can't carry the business
+  partner. Fix: Decide whether a reversal (reverse posting / credit note) is needed. Probably a later phase.
+- **MNT-12 · Low · needs D-5: Unused interval fields and an unfinished command.** Vehicle `maintenance_interval_days`
+  and `maintenance_oilchange_interval_km` are only read by `createNextMaintenanceEvent`, which never runs (the km
+  value is never used at all). The command `app:generate-maintenance-document` uses hard-coded vehicle 1, vendor 1 and
+  date 21-11-2024, saves nothing, and is not scheduled. Evidence:
+  `app/Console/Commands/GenerateMaintenanceDocument.php`; `Invoice.php:486`; `app/Console/Kernel.php` (schedules only
+  `app:send-email-notifications`). Effect: Users fill in interval fields that do nothing. Fix: Decide with D-5: finish
+  the scheduling or remove the stub command.
+
+### 11.4 Toll tax (type 2)
+
+- Flow: Create (`/toll-taxes/create`, admin → `Invoice::store_toll_tax`): header + rows (toll amount, check point as
+  free text, optional picture). Save as Draft → draft; Save as Completed → completed at once and posts Dr Toll
+  Expenses / Cr Accounts Payable on the document date (no partner). Edit and delete: drafts only
+  (`Invoice::update_toll_tax`).
+
+- **TOLL-01 · Critical: A toll completed from Edit is never posted.** Posting only happens when the toll is created as
+  Completed. If it is saved as Draft and later completed from Edit, `update_toll_tax` changes the status but its
+  posting code is commented out. Evidence: `app/Models/Invoice.php:902-910` (commented posting inside
+  `update_toll_tax`). Effect: Completed tolls missing from Toll Expenses and Accounts Payable. Fix: Post on the draft
+  → completed change in update, using the same helper as create, inside a transaction. Test: Create draft → edit →
+  Save as Completed → 2 postings.
+- **TOLL-02 · High · needs D-3: Toll posting has no business partner.** The posting call doesn't pass
+  `business_partner_id`. Evidence: `Invoice.php:333`. Dev DB: TOLL-0001 postings (Dr Toll Expenses 500 / Cr Accounts
+  Payable 500) have an empty `b_partner_id`. Effect: The Accounts Payable credit isn't linked to anyone; it can't be
+  paid or reported per party. Fix: Pass `business_partner_id` — after D-3 decides who a toll is owed to. Test:
+  Completed toll → both rows carry the document's partner.
+- **TOLL-03 · High: Adding a new row while editing a draft crashes.** New rows added on edit are saved with the key
+  `picture_of_toll_Tax` (capital T). Laravel quotes column names, and PostgreSQL treats quoted names as
+  case-sensitive; the real column is `picture_of_toll_tax`. Evidence: `Invoice.php:897`. Checked on the dev DB:
+  `SELECT "picture_of_toll_Tax" FROM invoice_lines` → column does not exist. Effect: 500 error. The header and the
+  earlier rows are already updated (no transaction), so the document is half-saved. Fix: Use `picture_of_toll_tax`;
+  wrap the update in a transaction. Test: Edit a draft, add a row, save → the new row is saved.
+- **TOLL-04 · Medium: Edit trusts the image path sent by the browser.** On edit, the controller copies the hidden
+  `picture_of_toll_tax_existing` field into the row and the model saves it as the image path. Evidence:
+  `app/Http/Controllers/TollTaxController.php:255-265`; `Invoice.php:775`. Effect: A user can point a toll line at any
+  file path in storage, for example another organization's upload. Fix: Keep the existing path from the database, as
+  `update_fuel_expense` already does (`Invoice.php:955-958`). Test: Tamper with the hidden field → the saved path
+  doesn't change.
+- Also applies: X-01, X-03 to X-10.
+
+### 11.5 Fuel expense (type 3)
+
+- Flow: Create (`/fuel-expenses/create`, admin → `Invoice::store_fuel_expense`): header + rows (meter reading km,
+  liters, price per liter saved in `line_amount`, total cost calculated in the browser, four optional photos). Save as
+  Completed should post Dr Fuel Expenses / Cr Accounts Payable but crashes (FUEL-01). Edit and delete: drafts only
+  (`Invoice::update_fuel_expense`).
+
+- **FUEL-01 · Critical: Save as Completed crashes.** The posting call leaves out the quantity argument, so every later
+  argument shifts by one and `table_id` is never passed. Evidence: `Invoice.php:482`: `createTransaction($date,
+  $company, $debit, $credit, (float)$grand_total, $currency->id, $fuel_id, null, null, 51, business_partner_id: …)`.
+  Signature, `app/Models/AccountTransaction.php:26`: `createTransaction($date, $company_id, $debit, $credit, $quantity =
+  1, $amount, $currency_id, $record_id, $line_id, $description, $table_id, $business_partner_id)`. Dev DB: FUEL-0001
+  (8,000) is completed with no postings; error reference FF-FCW5SGNW82. Effect: PHP ArgumentCountError → error page.
+  The invoice and its lines are already saved (no transaction), so the document stays Completed with no journal. The
+  mobile fuel endpoint (`Api/FuelExpenseController.php:128`) uses the same method and fails the same way. Fix: Pass
+  `1` as the quantity (as the toll call does); wrap header + lines + posting in a transaction. Handle FUEL-0001 per
+  D-8. Test: Create a fuel expense as Completed → 2 postings: Dr Fuel Expenses / Cr Accounts Payable for the total,
+  with the partner.
+- **FUEL-02 · Critical: A fuel expense completed from Edit is never posted.** Same as TOLL-01: `update_fuel_expense`
+  changes the status but its posting code is commented out. Evidence: `Invoice.php:1221-1229`. Effect: Completed fuel
+  expenses missing from the books. Fix: Same helper as FUEL-01, called on the draft → completed change. Test: Create
+  draft → edit → Save as Completed → 2 postings.
+- **FUEL-03 · Medium: Amounts are confusing and calculated only in the browser.** `line_amount` holds the price per
+  liter. `total_fuel_cost` (liters × price) and the header totals are calculated in the browser and saved as sent.
+  Evidence: `resources/views/fuel-expense/form.blade.php:245-248, 326-350`. Dev DB: FUEL-0001 line_amount 400, liters
+  20, total_fuel_cost 8,000. Effect: Anything reading `line_amount` gets the price, not the cost. A tampered request
+  can post any total. Fix: Recompute `total_fuel_cost` and the header totals on the server. Document (or rename)
+  `line_amount` = price per liter. Test: Send a wrong total → the server stores liters × price.
+- **FUEL-04 · Low: Meter reading is not checked.** The meter reading (km) is stored on the fuel line only; nothing
+  compares it with the vehicle's previous reading. Evidence: `FuelExpenseController.php:119` (`required` only).
+  Effect: Readings that go backwards and typos are not caught. Fix: Warn or block when the reading is lower than the
+  vehicle's last one (owner to confirm). Test: Reading lower than the last one → warning or error.
+- **FUEL-05 · Low: Price field stays editable on a completed document.** The fuel price input has no `{{ $disabled
+  }}`, unlike the other fields. Evidence: `fuel-expense/form.blade.php:245`. Effect: Cosmetic: the server refuses the
+  save (update allows drafts only). Fix: Add `{{ $disabled }}` to the input. Test: Open a completed fuel expense →
+  price field disabled.
+- Also applies: X-01, X-03 to X-10.
+
+### 11.6 Inspection (type 5)
+
+- What it is: a check-up record — a checklist with a tick per item, notes, optional parts. No quantity or rate, so the
+  total is always 0 and nothing posts. No approval. Web only.
+- Setup: the checklist is Setups → Maintenance Activity (`/activities`, module 33). One active checklist per
+  organization; tick “Is Active” on the checklist **and** on every line (both start unticked). Dev DB: 0 checklists —
+  fix X-07 before creating one.
+- Required on create: vehicle, business partner, date, start time, end time (server and form). Status comes from the
+  button (Save as Draft → `draft`, Save as Completed → `completed`). At least one line — the automatic Service Charges
+  row meets it. Optional: description, checklist ticks and notes, manual “+” rows (product + details; details
+  required).
+- Flow: create (also from the calendar popup “Add Inspection”, which passes `?vehicle_id=`) → list (draft and
+  completed) → edit (draft only, but Save goes to the maintenance form: INSP-01) → completed inspection's “Create
+  Maintainence” opens the maintenance form with vehicle, partner and inspection number (lines not copied; link lost:
+  INSP-02). Designed but off: next inspection at date + vehicle interval days (INSP-05).
+
+- **INSP-01 · Critical: A draft inspection can't be saved again or completed.** The inspection edit form always posts
+  to `inspection.create_maintainence` (the route used by the “Create Maintainence” button). Saving a draft therefore
+  opens a new maintenance form instead of updating the inspection. Evidence:
+  `resources/views/inspection/edit.blade.php:18`. `InspectionController@update` is never reached — and it would fail
+  anyway: it requires quantity, rate and line total, which the inspection form doesn't have, and it doesn't save the
+  times. Effect: Changes to a draft inspection are lost; a draft can never become completed. Fix: Post Save to
+  `inspections.update`; give the “Create Maintainence” button its own form or link. Fix `update` rules (nullable
+  qty/rate for inspections, save times). Test: Edit a draft, tick items, Save as Completed → the inspection is
+  completed with the ticks saved.
+- **INSP-02 · High: Maintenance link is not saved; “Create Maintainence” can be repeated.** The maintenance form sends
+  `inspection_id` and the code passes it to `Invoice::create`, but `inspection_id` is not in the model's `$fillable`,
+  so Laravel drops it silently. Evidence: `app/Models/Invoice.php:70-77` (`$fillable`), `Invoice.php:209` (passes it).
+  The button hides only when a maintenance with this `inspection_id` exists (`inspection/form.blade.php:245-262`). Dev
+  DB: MNT-0004 (vehicle 1, partner 3, 7 Oct) has an empty `inspection_id`; Insp-0001 still shows the button. Effect:
+  Several maintenance documents can be created from one inspection; the link between them is lost. Fix: Add
+  `inspection_id` to `$fillable`. Test: Create maintenance from an inspection → `inspection_id` saved, button gone.
+- **INSP-03 · High: No permission check on inspections.** The constructor adds the `RolePermissions` middleware only
+  when `$is_inspection` is false — and it is always true for this controller. Evidence:
+  `app/Http/Controllers/InspectionController.php:30-34`. Effect: Any logged-in user of the organization can list,
+  create and delete inspections, whatever their role. (Other organizations' data stays hidden by the organization
+  scope.) Fix: Always apply `RolePermissions`; keep `create_maintainence` in `$ignores` if needed. Test: A role
+  without module 44 opens /inspections → 403.
+- **INSP-04 · Medium · needs D-6: Unticked checklist lines are thrown away on Completed.** When an inspection is saved
+  as Completed, checklist lines with `is_checked = 0` are skipped and never saved. Evidence: `Invoice.php:220`.
+  Effect: No record of which items were not checked or failed; there is no pass/fail field. Fix: Decision D-6: keep
+  every line with a result (pass / fail / not checked), or keep today's behaviour. Test: Complete with 3 of 5 items
+  ticked → per D-6.
+- **INSP-05 · Medium · needs D-5: Next-inspection scheduling is switched off.** `Invoice::createNextMaintenanceEvent`
+  would create a calendar event `planed_maintenance` at inspection date + the vehicle's `maintenance_interval_days`
+  and notify the driver, vehicle manager, partner user and company admin. Every call to it is commented out; the only
+  live call passes type 1 and returns at once. Evidence: `Invoice.php:486-570`; commented calls at `Invoice.php:253,
+  652`, `InspectionController.php:437`, `MaintenanceController.php:435`, `MaintenanceApprovalsController.php:157`.
+  Readers of these events: `CalendarController.php:91, 115`; `VehicleDashboardController.php:135-136`; calendar popup
+  “Add Inspection” (`public/assets/js/tui_calendar_app.js:519`). Effect: Vehicle dashboard “Inspection Overdue” and
+  “Due Soon” always show 0; the calendar shows no planned inspections. Fix: Decision D-5. If reconnected: call it when
+  an inspection is completed, and make “overdue” ignore events already followed by an inspection (today nothing marks
+  an event as done). Test: Complete an inspection for a vehicle with a 30-day interval → event on date + 30,
+  notifications created.
+- **INSP-06 · Medium: “Due Soon” counter query is wrong.** `whereDate('date', [today, today + 7])` passes an array;
+  Laravel uses only the first value. Evidence: `app/Http/Controllers/VehicleDashboardController.php:136`. Effect:
+  Counts only events dated today, not the next 7 days. Fix: `whereBetween` on the date range. Fix with INSP-05. Test:
+  Event in 3 days → counted as Due Soon.
+- **INSP-07 · Medium: Delete icon on completed rows; “deleted” message when nothing was deleted.** Every row shows
+  Delete; `destroy` deletes drafts only but always says “deleted successfully”. Evidence:
+  `InspectionController.php:525-535`; `resources/views/inspection/index.blade.php:102-118`. Effect: Misleading
+  message; users think a completed inspection was removed. Fix: Show Delete on drafts only; return an error when
+  nothing was deleted. Test: Delete a completed inspection → error message, row still there.
+- **INSP-08 · Low: Future dates can be completed; end time before start time accepted.** No check on the date or the
+  time order. Evidence: `InspectionController.php:169-195`. Dev DB: Insp-0001 is dated 2026-10-09 and was completed on
+  2026-10-07. Effect: Wrong history data. Fix: `end_time` after `start_time`; block Completed for a future date (owner
+  to confirm). Test: End before start → validation error.
+- **INSP-09 · Low: Lines are not copied into the maintenance created from an inspection.** Only vehicle, partner and
+  inspection number are prefilled. Evidence: `MaintenanceController.php:118-141`; `maintenance/form.blade.php:486-491`
+  (no line loading from the inspection). Effect: The user re-types the work found during the inspection. Fix:
+  Optional: prefill lines from the inspection's ticked items.
+- **INSP-10 · Low: One checklist per company, picked without an order.** The Activity form allows only one active
+  checklist; `getActiveActivity` uses `first()` with no `orderBy`. Evidence:
+  `resources/views/activity/form.blade.php:45-54`; `app/Models/Activity.php:89-99`. Effect: No checklist per vehicle
+  type. Fine for now. Fix: Add `orderBy` for a stable pick; per-type checklists only if the owner asks.
+- **INSP-11 · Low: Checklist items must be ticked by hand.** The auto-tick in `calculate_total()` loops over the rate
+  inputs, which only the maintenance form has. Evidence: `resources/views/inspection/form.blade.php:424-447` (inputs
+  with class `rate` exist only when not an inspection, line 352-360). Effect: Typing notes on a checklist row doesn't
+  tick it (it does on maintenance). Fix: Tick when notes are typed, or leave manual (owner to confirm).
+
+### 11.7 Shared issues
+
+- **X-01 · High · needs D-3: Vendors can't be chosen; Accounts Payable has no real creditor.** Maintenance and
+  inspection use `BusinessPartnerDropdownSimple` (agents, drivers, customers, walk-ins); toll and fuel use
+  `BusinessPartnerDropdownIncludeDriver` (same list for admins). Vendors (actor 10) are never offered, yet every
+  posting credits Accounts Payable. Evidence: `app/Models/Partner.php:589-617`. Forms:
+  `maintenance/form.blade.php:53`, `inspection/form.blade.php:53`, `maintenance-approvals/form.blade.php:52`,
+  `toll-tax/form.blade.php:40`, `fuel-expense/form.blade.php:50`. Dev DB: MNT-0001 credited to “magent” (agent),
+  MNT-0004 to “testingagent” (agent), FUEL-0001 partner “mdriver” (driver). Effect: Payables recorded against agents
+  and drivers, or nobody (TOLL-02). Nobody can see what is owed to which vendor. Fix: Decision D-3, then a vendor
+  dropdown on maintenance (and on toll/fuel if D-3 says so). Test: Maintenance form lists vendors; posting carries the
+  vendor.
+- **X-02 · High: No vendor ledger and no way to pay a vendor.** Ledgers don't read `account_transactions`; there is no
+  vendor ledger and no payment screen that settles Accounts Payable for a vendor. Evidence: Vendor full-cycle
+  investigation, 2026-10-07 (read-only). Effect: Accounts Payable only grows. Fix: A feature, not a bug fix — plan it
+  with the Phase 2 accounting work.
+- **X-03 · High: No database transactions.** All store, update and status methods write the header, lines, files and
+  postings as separate statements. Evidence: `Invoice::store_maintainence`, `update_maintainence`,
+  `update_maintainence_status`, `store_toll_tax`, `update_toll_tax`, `store_fuel_expense`, `update_fuel_expense`.
+  Effect: A failure half-way leaves partial documents (seen in FUEL-01, TOLL-03, MNT-04). Fix: Wrap each in
+  `DB::transaction` while fixing the related item; use one shared posting helper. Test: Covered by the tests of
+  FUEL-01, TOLL-03 and MNT-04.
+- **X-04 · Medium: Wrong id gives a 500 instead of 404.** Records are loaded with `->first()` and used without a null
+  check. Show pages also don't check the document type. Evidence: MaintenanceController `update` and `show`;
+  MaintenanceApprovalsController `edit` (:93-95) and `update` (:132-133). TollTaxController `update` (:249-251),
+  `destroy` (:394-396), `show` (:175, no type filter). FuelExpenseController `update` (:236-238), `destroy`
+  (:324-326), `show` (:186, no type filter). InspectionController `show` (:307, `Invoice::find`, no type filter).
+  Effect: Error pages for a mistyped or other organization's id. Fix: `where('document_type_id', …)->findOrFail($id)`
+  → 404. Test: Open each page with a non-existent id → 404.
+- **X-05 · High: Uploaded files are not checked (security).** The toll picture and the four fuel photos are validated
+  only as `nullable`: any file type and size is accepted and stored on the public disk under the original file name
+  (with a timestamp prefix). Evidence: `TollTaxController.php:117`; `FuelExpenseController.php:121-125`. Storing:
+  `Invoice.php:292-311, 374-453` and the update methods. Effect: HTML or SVG files served from /storage can run script
+  on the app's domain. If the web server runs PHP files under public/storage, an uploaded .php file could run on the
+  server. The mobile toll and fuel endpoints use the same model code; their validation should be checked too. Fix:
+  `image|mimes:jpg,jpeg,png,webp|max:5120` on every file field; store with a random name (`store()` instead of
+  `storeAs()` with the client's name). Test: Upload a .php or .html file → validation error.
+- **X-06 · Medium: System accounts are found by name.** Posting looks up “Maintenance Expense”, “Toll Expenses”, “Fuel
+  Expenses” and “Accounts Payable” by name per organization. Evidence: `Invoice.php:330-331, 479-480, 725-726`.
+  Effect: Renaming one of these accounts breaks posting (crash, or completed with no journal). Fix: Phase 2 plan:
+  `accounts.system_key`. Until then, fail loudly inside the transaction. Test: Covered by MNT-04.
+- **X-07 · Medium: Toll and fuel forms load the maintenance checklist.** Both create forms call `load_activity()`
+  (copied from the maintenance form), adding one blank required row per active checklist line. Evidence:
+  `toll-tax/form.blade.php:380-384, 409`; `fuel-expense/form.blade.php:427-431, 456`. Controllers pass
+  `Activity::getActiveActivity` (`TollTaxController.php:85`, `FuelExpenseController.php:89`). Effect: Hidden today
+  because there are 0 checklists. As soon as an inspection checklist is created, every new toll and fuel form starts
+  with N empty required rows that must be deleted first. Fix: Remove `load_activity()` from both forms and stop
+  passing `$activity`. Do this before a checklist is created. Test: With an active checklist, toll and fuel create
+  show exactly one empty row.
+- **X-08 · Low: Save buttons call a function that no longer exists.** Toll and fuel Save buttons call
+  `calculate_total()`, which is commented out in both files. Evidence: `toll-tax/form.blade.php:397-404`;
+  `fuel-expense/form.blade.php:444-451`. Effect: A console error on every save; the form still submits. Fix: Remove
+  the calls (totals are kept by `updateTotals()`). Test: Save → no console error.
+- **X-09 · Medium: Toll/fuel partner dropdown for non-admin users.** For non-admins
+  `BusinessPartnerDropdownIncludeDriver` returns every partner of every type (agents get only their own), and a user
+  without a partner record crashes on `auth()->user()->partner->actor_id`. Evidence: `Partner.php:589-599`. Effect:
+  Latent: toll and fuel are admin-only on the web today. Matters if the modules are given to other roles. Fix: Fold
+  into the D-3 dropdown work.
+- **X-10 · Low: Upload folders: disk mismatch, company name in the path.** `Storage::exists()` / `makeDirectory()` use
+  the default disk while files are stored on the `public` disk; the folder is named after the company. Evidence:
+  `Invoice.php:299-307` and the other upload blocks. Effect: Empty folders under `storage/app/<company name>/…`; names
+  with spaces or special characters, and a renamed company splits its files. Also: the dev machine has no
+  `public/storage` link, so uploaded images don't display on dev (`php artisan storage:link` — ask before running).
+  Fix: Use the public disk consistently and the company id in the path.
+
+### 11.8 Decisions needed from the user
+
+| ID | Question | Blocks | Answer |
+| --- | --- | --- | --- |
+| D-1 | Cancel on maintenance: add `cancelled` to the database constraint (migration — needs OK), or map Cancel to `draft`? | MNT-01 |  |
+| D-2 | Maintenance posting date: the document date or the approval date? | MNT-05 |  |
+| D-3 | Who is the creditor? Maintenance → vendor (workshop). Toll and fuel → a vendor (pump, toll operator), or paid in cash by the driver (credit Cash / driver advance instead of Accounts Payable)? | X-01, TOLL-02, X-09 |  |
+| D-4 | Owner rules for drivers and vehicle managers on maintenance and inspection: what counts as “their” documents? | MNT-10 |  |
+| D-5 | Inspection scheduling: reconnect the existing next-inspection event (small change) or leave it off for now? | INSP-05, INSP-06, MNT-12 |  |
+| D-6 | Inspection results: keep unticked items with a pass/fail result, or keep today's behaviour? | INSP-04 |  |
+| D-7 | Should toll and fuel go through an approval step like maintenance? Today they are completed directly. | TOLL-01, FUEL-01 |  |
+| D-8 | Existing dev records: FUEL-0001 (completed, no journal), TOLL-0001 (posting without partner), MNT-0004 (no inspection link). Correct them with a data fix (DB write — needs OK) or leave as test data? | FUEL-01, TOLL-02, INSP-02 |  |
+
+### 11.9 Fix order
+
+Waves: 1 wrong or missing accounting; 2 security; 3 broken screens; 4 correctness and clean-up; 5 features and user
+decisions. Top to bottom inside a wave. Each item: a test that fails on the current code first (`fleet_freak_testing`
+only), the fix, the full suite with Xdebug off, a report, then commit only when the user says so. Record each fix
+here.
+
+| # | Wave | ID | What | Severity | Decision | Done |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 | 1 | FUEL-01 | Save as Completed crashes | Critical | — |  |
+| 2 | 1 | FUEL-02 | A fuel expense completed from Edit is never posted | Critical | — |  |
+| 3 | 1 | TOLL-01 | A toll completed from Edit is never posted | Critical | — |  |
+| 4 | 1 | MNT-02 + MNT-03 | Completing twice posts twice; Approval can complete any invoice type as maintenance (fix together) | Critical | — |  |
+| 5 | 1 | MNT-04 | Status change and posting are not in one transaction (with X-03 on this path) | High | — |  |
+| 6 | 2 | INSP-03 | No permission check on inspections | High | — |  |
+| 7 | 2 | X-05 | Uploaded files are not checked (security) | High | — |  |
+| 8 | 2 | TOLL-04 | Edit trusts the image path sent by the browser | Medium | — |  |
+| 9 | 3 | X-07 | Toll and fuel forms load the maintenance checklist (do before anyone creates a checklist) | Medium | — |  |
+| 10 | 3 | INSP-01 | A draft inspection can't be saved again or completed | Critical | — |  |
+| 11 | 3 | INSP-02 | Maintenance link is not saved; “Create Maintainence” can be repeated | High | — |  |
+| 12 | 3 | TOLL-03 | Adding a new row while editing a draft crashes | High | — |  |
+| 13 | 3 | MNT-01 | Cancel always crashes (after D-1) | Critical | D-1 |  |
+| 14 | 3 | MNT-06 | Saved drafts disappear from the list | High | — |  |
+| 15 | 3 | X-08 | Save buttons call a function that no longer exists | Low | — |  |
+| 16 | 4 | MNT-07 + INSP-07 | Delete on a pending row says “deleted” but deletes nothing; Delete icon on completed rows; “deleted” message when nothing was deleted (fix together) | Medium | — |  |
+| 17 | 4 | MNT-08 | Editing a draft loses start and end time | Medium | — |  |
+| 18 | 4 | X-04 | Wrong id gives a 500 instead of 404 | Medium | — |  |
+| 19 | 4 | X-03 | No database transactions (whatever is left after waves 1–3) | High | — |  |
+| 20 | 4 | FUEL-03 | Amounts are confusing and calculated only in the browser | Medium | — |  |
+| 21 | 4 | MNT-05 | Posting date is the approval day, not the maintenance date (after D-2) | Medium | D-2 |  |
+| 22 | 4 | TOLL-02 | Toll posting has no business partner (after D-3) | High | D-3 |  |
+| 23 | 4 | MNT-09 | Approval routes without controller methods | Low | — |  |
+| 24 | 4 | FUEL-05 | Price field stays editable on a completed document | Low | — |  |
+| 25 | 4 | INSP-08 | Future dates can be completed; end time before start time accepted | Low | — |  |
+| 26 | 5 | X-01 + X-09 | Vendors can't be chosen; Accounts Payable has no real creditor; Toll/fuel partner dropdown for non-admin users (after D-3) | High | D-3 |  |
+| 27 | 5 | X-02 | No vendor ledger and no way to pay a vendor (plan with Phase 2) | High | — |  |
+| 28 | 5 | X-06 | System accounts are found by name (Phase 2) | Medium | — |  |
+| 29 | 5 | INSP-05 + INSP-06 | Next-inspection scheduling is switched off; “Due Soon” counter query is wrong (after D-5) | Medium | D-5 |  |
+| 30 | 5 | INSP-04 | Unticked checklist lines are thrown away on Completed (after D-6) | Medium | D-6 |  |
+| 31 | 5 | MNT-10 | Drivers and vehicle managers have full maintenance rights (after D-4) | Medium | D-4 |  |
+| 32 | 5 | MNT-11 | No way to reverse a completed maintenance | Low | — |  |
+| 33 | 5 | MNT-12 | Unused interval fields and an unfinished command (with D-5) | Low | D-5 |  |
+| 34 | 5 | FUEL-04 | Meter reading is not checked | Low | — |  |
+| 35 | 5 | INSP-09 | Lines are not copied into the maintenance created from an inspection | Low | — |  |
+| 36 | 5 | INSP-10 | One checklist per company, picked without an order | Low | — |  |
+| 37 | 5 | INSP-11 | Checklist items must be ticked by hand | Low | — |  |
+| 38 | 5 | X-10 | Upload folders: disk mismatch, company name in the path | Low | — |  |
+
+### 11.10 Dev DB snapshot (2026-10-07, read-only)
+
+| Document | Status | Vehicle | Partner | Date | Postings (table 51) | Notes |
+| --- | --- | --- | --- | --- | --- | --- |
+| MNT-0001 (id 1) | completed | empty* | 10 magent (agent) | 2026-10-07 | Dr Maintenance Expense 400 / Cr Accounts Payable 400, dated 2026-10-06, partner 10 | Posting date ≠ document date (MNT-05) |
+| MNT-0002 (id 2) | draft | empty* | 3 testingagent (agent) | 2026-10-07 | — | Not in the Maintenance list (MNT-06) |
+| MNT-0003 (id 3) | pending | empty* | 3 (agent) | 2026-10-08 | — |  |
+| TOLL-0001 (id 4) | completed | 1 | 7 Alidriver (driver) | 2026-10-06 | Dr Toll Expenses 500 / Cr Accounts Payable 500, no partner | TOLL-02 |
+| FUEL-0001 (id 5) | completed | 1 | 11 mdriver (driver) | 2026-10-06 | none | Crashed on save, ref FF-FCW5SGNW82 (FUEL-01); 20 L × 400 = 8,000 |
+| Insp-0001 (id 6) | completed | 1 | 3 (agent) | 2026-10-09 | n/a | Future date; only the Service Charges line |
+| MNT-0004 (id 7) | completed | 1 | 3 (agent) | 2026-10-07 | Dr Maintenance Expense 225 / Cr Accounts Payable 225, dated 2026-10-07, partner 3 | `inspection_id` empty (INSP-02) |
+
+\* Lost their vehicle in the 2026-10-07 migration run (§2). Checklists: `activities` 0 rows, `activity_lines` 0 rows.
