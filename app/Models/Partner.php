@@ -39,6 +39,10 @@ class Partner extends BaseModel
 {
     use BelongsToOrganization, ChecksGlobalPermission;
 
+    // Partner types a maintenance document may name: vendors (10), then agents, drivers, customers and walk-ins.
+    // The drop-down (maintenancePartnerGroups) and the server-side check share this list.
+    const MAINTENANCE_PARTNER_ACTORS = [10, 4, 5, 6, 8];
+
     // static $rules = [
 	// 		'name' => 'required|string',
 	// 		'partner_type' => 'required',
@@ -647,5 +651,13 @@ class Partner extends BaseModel
         // }
 
 
+    }
+
+    // Business Partner drop-down on the maintenance and maintenance approval forms, as <optgroup> label => partners.
+    public static function maintenancePartnerGroups(){
+        return [
+            'Vendors' => self::vendorDropdown(),
+            'Other partners' => self::BusinessPartnerDropdownSimple(),
+        ];
     }
 }

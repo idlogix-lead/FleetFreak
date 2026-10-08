@@ -7,6 +7,7 @@ use App\Models\InvoiceLine;
 use App\Models\InvoiceLineProduct;
 use App\Models\Activity;
 use App\Models\InvoiceDocumentType;
+use App\Models\Partner;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -148,6 +149,17 @@ class MaintenanceController extends Controller
         ];
     }
 
+    // The business partner must be one the form offers (Partner::maintenancePartnerGroups): a partner of the active
+    // organization of an allowed type. Without this any id was saved, another organization's partner included.
+    private static function businessPartnerRules(){
+        return [
+            'required',
+            Rule::exists('partners', 'id')
+                ->where('company_id', auth()->user()->active_company())
+                ->whereIn('actor_id', Partner::MAINTENANCE_PARTNER_ACTORS),
+        ];
+    }
+
     /**
      * Store a newly created resource in storage.
      *
@@ -168,7 +180,7 @@ class MaintenanceController extends Controller
             // 'document_no' => ['required'],
 			// 'company_id' => ['required'],
 			'vehicle_id' => ['required'],
-			'business_partner_id' => ['required'],
+			'business_partner_id' => self::businessPartnerRules(),
 			'date' => ['required'],
 			'start_time' => ['required'],
 			'end_time' => ['required'],
@@ -395,7 +407,7 @@ class MaintenanceController extends Controller
 			// 'document_no' => ['required'],
 			// 'company_id' => ['required'],
 			'vehicle_id' => ['required'],
-			'business_partner_id' => ['required'],
+			'business_partner_id' => self::businessPartnerRules(),
 			'date' => ['required'],
 			'description' => ['nullable','string'],
 			'total_amount' => ['required'],

@@ -172,6 +172,9 @@ _Refreshed 2026-09-24 (end of the Phase 1 follow-up session). Redesign status ad
   inspection. 42 issues with IDs, 8 decisions for the user, and a fix order in §11 (the user also has the same
   findings as a Word file, kept outside the repo). Fixes wait for the user's choice. Until X-07 is fixed, don't create
   an inspection checklist (it adds blank rows to the toll and fuel forms).
+- **2026-10-08, maintenance step 1 (user's request):** vendors in the maintenance Business Partner drop-down, listed
+  first; the other partner types stay for now (the user will remove them later). The server accepts only partners the
+  drop-down offers. Six more maintenance-create issues found (MNT-13 to MNT-18). Details in §11.11.
 - **Standing rule:** report first; the user checks, then says "commit". Never commit, push, amend, reset or stash
   without that, and a described commit ("it must be its own commit") is not permission. No database writes; tests run
   only on `fleet_freak_testing`. Since 2026-10-06: run the full suite (Xdebug off, about 40 s, §1) before every
@@ -1865,6 +1868,9 @@ Most important:
   and drivers, or nobody (TOLL-02). Nobody can see what is owed to which vendor. Fix: Decision D-3, then a vendor
   dropdown on maintenance (and on toll/fuel if D-3 says so). Test: Maintenance form lists vendors; posting carries the
   vendor.
+  - **Update (2026-10-08): maintenance part done** (§11.11). The user decided vendors go on the maintenance drop-down
+    now, next to the other types until they remove those. The maintenance and approval forms list vendors and the
+    server checks the partner. Inspection, toll and fuel are unchanged; toll and fuel still wait for D-3.
 - **X-02 · High: No vendor ledger and no way to pay a vendor.** Ledgers don't read `account_transactions`; there is no
   vendor ledger and no payment screen that settles Accounts Payable for a vendor. Evidence: Vendor full-cycle
   investigation, 2026-10-07 (read-only). Effect: Accounts Payable only grows. Fix: A feature, not a bug fix — plan it
@@ -1992,3 +1998,41 @@ here.
 | MNT-0004 (id 7) | completed | 1 | 3 (agent) | 2026-10-07 | Dr Maintenance Expense 225 / Cr Accounts Payable 225, dated 2026-10-07, partner 3 | `inspection_id` empty (INSP-02) |
 
 \* Lost their vehicle in the 2026-10-07 migration run (§2). Checklists: `activities` 0 rows, `activity_lines` 0 rows.
+
+### 11.11 2026-10-08: maintenance step 1, vendors in the Business Partner drop-down
+
+**Change** (the user's request: vendors on the maintenance drop-down; the other partner types stay for now and will be
+removed later):
+- `Partner::MAINTENANCE_PARTNER_ACTORS = [10, 4, 5, 6, 8]` and `Partner::maintenancePartnerGroups()`: “Vendors”
+  (`vendorDropdown()`, already used by the purchase forms) then “Other partners” (`BusinessPartnerDropdownSimple()`,
+  unchanged because six other forms use it).
+- `maintenance/form.blade.php` and `maintenance-approvals/form.blade.php` print the two groups as `<optgroup>`s; the
+  options and the `selected` logic are unchanged. The approval form needed it too, or a vendor document showed
+  “-- Select --” there.
+- `MaintenanceController@store` and `@update` (`businessPartnerRules()`): `business_partner_id` must be a partner of
+  the active organization with one of those actor types. Before, any id was saved: another organization's partner
+  silently, a non-existent id as a foreign-key 500. The inspection “Create Maintainence” flow sends agents, drivers,
+  customers or walk-ins, which are still accepted.
+- To drop the other types later: remove the second group and set the constant to `[10]`.
+- `tests/Feature/MaintenanceVendorPartnerTest.php`: 6 tests, 24 assertions. Against the old code (HEAD `f3e885b`) 4
+  fail (the form lists vendors; the approval form shows a vendor; another organization's partner is rejected; an
+  employee partner is rejected) and 2 pass (saving with a vendor and approving posts against the vendor; changing a
+  draft to a vendor): those two guard that the new rule accepts vendors. Full suite with Xdebug off: OK, 72 tests,
+  501 assertions, in normal order (61 s) and random order (seed 1791438911, 61 s).
+
+**Other maintenance-create issues found (2026-10-08, not fixed; the user chooses next):**
+- **MNT-13 · Medium: “Save as Completed” saves `pending`.** The button sends the document to Maintenance Approvals;
+  nothing is completed or posted yet, but users think it is done. Evidence: `maintenance/form.blade.php:235` (label)
+  and `:485` (sets `pending`). Fix: rename to “Submit for Approval”.
+- **MNT-14 · Medium: the vehicle id isn't checked on the server.** `vehicle_id` is only `required`: another
+  organization's vehicle is accepted, and a non-existent id is a foreign-key 500. Fix: `Rule::exists('vehicles')` for
+  the active organization, the same pattern as the partner rule.
+- **MNT-15 · Medium: totals come from the browser.** Line totals and header totals are saved as sent, and the approval
+  posts the header `grand_total_amount`; the server never recomputes quantity × rate. Fix: recompute on the server.
+- **MNT-16 · Medium: a validation error empties the form.** `MaintenanceController.php:235, 432`
+  (`back()->with('errors', …)` without `withInput()`): every line typed is lost. Fix: `withInput()` and refill the
+  lines.
+- **MNT-17 · Low: a vehicle without a model crashes Maintenance → Create.** The drop-down prints
+  `$vehicle->vehicleModel->name` (`maintenance/form.blade.php:28`); `vehicles.vehicle_model_id` is nullable. Fix: a
+  null-safe label.
+- **MNT-18 · Low: an end time before the start time is accepted.** Fix: `after:start_time`, as for INSP-08.

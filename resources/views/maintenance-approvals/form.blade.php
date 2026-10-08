@@ -49,10 +49,14 @@
                     <select {{ $disabled }} name="business_partner_id" autofocus required id="business_partner_id"
                         class="form-control {{ $errors->has('business_partner_id') ? ' is-invalid' : '' }}">
                         <option value="">-- Select --</option>
-                        @foreach (App\Models\Partner::BusinessPartnerDropdownSimple() as $business_partner)
-                            <option value="{{ $business_partner->id }}"
-                                {{ $maintenance->business_partner_id == $business_partner->id ? 'selected' : '' }}>
-                                {{ Str::title($business_partner->name) }}</option>
+                        @foreach (App\Models\Partner::maintenancePartnerGroups() as $partner_group => $business_partners)
+                            <optgroup label="{{ $partner_group }}">
+                            @foreach ($business_partners as $business_partner)
+                                <option value="{{ $business_partner->id }}"
+                                    {{ $maintenance->business_partner_id == $business_partner->id ? 'selected' : '' }}>
+                                    {{ Str::title($business_partner->name) }}</option>
+                            @endforeach
+                            </optgroup>
                         @endforeach
                     </select>
                     {{-- <input type="text" placeholder="Business Partner Id" name="business_partner_id" class="form-control {{($errors->has('business_partner_id') ? ' is-invalid' : '')}}" id="business_partner_id" value="{{$maintenance->business_partner_id}}"> --}}
