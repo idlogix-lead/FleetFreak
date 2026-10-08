@@ -580,6 +580,9 @@ class Invoice extends BaseModel
             'vehicle_id' => $data['vehicle_id'],
             'business_partner_id' => $data['business_partner_id'],
             'date' => $data['date'],
+            // Inspection's update doesn't send times; keep the saved ones there.
+            'start_time' => $data['start_time'] ?? $invoice->start_time,
+            'end_time' => $data['end_time'] ?? $invoice->end_time,
             'description' => $data['description'],
             'total_amount' => $data['total_amount'],
             'grand_total_amount' => $data['grand_total_amount'],

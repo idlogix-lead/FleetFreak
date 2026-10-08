@@ -175,11 +175,14 @@ _Refreshed 2026-09-24 (end of the Phase 1 follow-up session). Redesign status ad
 - **2026-10-08, maintenance step 1 (user's request):** vendors in the maintenance Business Partner drop-down, listed
   first; the other partner types stay for now (the user will remove them later). The server accepts only partners the
   drop-down offers. Six more maintenance-create issues found (MNT-13 to MNT-18). Details in §11.11. Committed
-  (`5f6a7d9`), not pushed.
+  (`5f6a7d9`) and pushed with the next item.
 - **2026-10-08, Trial Balance report fixed (user's request):** it always failed on PostgreSQL ("Error executing SQL
   statement") and, with dates, hid accounts that had no entry before the start date. Its controller now passes only
   validated dates. **Open security finding:** the other three Jasper reports pass every query-string value into a
-  shell command (command injection for any logged-in user). Details in §11.12.
+  shell command (command injection for any logged-in user). Details in §11.12. Committed and pushed (`ae88e3a`).
+- **2026-10-08, maintenance step 2 (user's request):** the Maintenance list shows drafts and pending documents (a
+  saved draft used to vanish), Delete only on drafts with an error when nothing is deleted, and editing a draft saves
+  its times (MNT-06, MNT-07, MNT-08). Details in §11.13.
 - **Standing rule:** report first; the user checks, then says "commit". Never commit, push, amend, reset or stash
   without that, and a described commit ("it must be its own commit") is not permission. No database writes; tests run
   only on `fleet_freak_testing`. Since 2026-10-06: run the full suite (Xdebug off, about 40 s, §1) before every
@@ -1678,16 +1681,19 @@ Most important:
   (`whereIn('document_status', ['pending'])`). Effect: A saved draft can't be found again in the UI (dev: MNT-0002).
   Fix: List draft and pending (completed read-only, or via a status filter). Test: Save a draft → it appears in the
   list with Edit and Delete.
+  - **Update (2026-10-08): fixed** (§11.13). The user chose draft + pending; completed stay under Maintenance Approvals.
 - **MNT-07 · Medium: Delete on a pending row says “deleted” but deletes nothing.** The list shows Delete on every row.
   `destroy` deletes drafts only but always answers “deleted successfully”. Evidence: `MaintenanceController.php:523+`
   (`destroy`), `resources/views/maintenance/index.blade.php` action column. Effect: Users think a document was removed
   when it wasn't. Fix: Show Delete on drafts only; return an error message when nothing was deleted. Test: Delete a
   pending maintenance → error message, row still there.
+  - **Update (2026-10-08): fixed** (§11.13).
 - **MNT-08 · Medium: Editing a draft loses start and end time.** `update` doesn't validate or save `start_time` and
   `end_time`. Evidence: `MaintenanceController.php:383+` (`update` rules have no times; `store` has them at 173-174).
   `Invoice.php:579-592` (`update_maintainence` doesn't write them). Effect: Times entered while editing are dropped;
   wrong times can't be corrected. Fix: Validate and save both fields in `update`. Test: Edit a draft's times → new
   times saved.
+  - **Update (2026-10-08): fixed** (§11.13).
 - **MNT-09 · Low: Approval routes without controller methods.** `Route::resource('maintenance_approvals', …)`
   registers create, store and show, but the controller has no such methods. Evidence: `routes/web.php:152`;
   `MaintenanceApprovalsController.php` has index, edit, update, destroy and destroy_row — no create, store or show.
@@ -2089,3 +2095,23 @@ identifiers; values from a strict allow-list) — or remove those three test rep
 **Also seen, not investigated:** `storage/logs/laravel.log` has “Cannot redeclare is_active_route() (previously
 declared in app/helpers.php:5)” every minute since 2026-09-14 (7,000+ entries): a scheduled process fails on every
 run.
+
+### 11.13 2026-10-08: maintenance step 2, drafts in the list (MNT-06, MNT-07, MNT-08)
+
+The user reported that a maintenance saved as a draft doesn't appear in the list. The list showed only pending
+documents, while only drafts can be edited or deleted. User's decisions: the list shows draft + pending (completed
+stay under Maintenance Approvals), and MNT-07 and MNT-08 are fixed in the same change, because both show up as soon
+as drafts are listed.
+
+- `MaintenanceController@index`: `['draft', 'pending']` instead of `['pending']`. Newest first, as before.
+- `maintenance/index.blade.php`: the Delete form only on draft rows. Edit stays on every row; a pending document opens
+  read-only (the form disables itself for pending and completed).
+- `MaintenanceController@destroy`: when the draft-only delete removes nothing, it redirects with an `error` (“Only
+  draft maintenance documents can be deleted.”) instead of “deleted successfully”. Drafts are still soft-deleted.
+- `MaintenanceController@update` requires `start_time` and `end_time` (as `store` does), and
+  `Invoice::update_maintainence` writes them. It falls back to the saved values when they are missing, because
+  `InspectionController@update` also calls it without times (that path is unreachable today, INSP-01).
+- `tests/Feature/MaintenanceListTest.php`: 4 tests, 21 assertions (the list shows draft and pending, not completed;
+  Delete only on drafts; deleting a pending document is refused and a draft is soft-deleted; editing a draft saves its
+  times). Against the old code (HEAD `ae88e3a`) all 4 fail. Full suite with Xdebug off: OK, 78 tests, 533 assertions,
+  normal (57 s) and random order (seed 1791452416).

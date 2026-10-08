@@ -66,7 +66,8 @@ class MaintenanceController extends Controller
 
         $perPage = $request->input('perPage', 10);
         // company_id
-        $maintenances = Invoice::where('document_type_id', ($is_inspection?5:1))->whereIn('document_status',($is_inspection?['completed','draft']:['pending']))
+        // Maintenance: drafts (editable) and pending (read-only, awaiting approval). Completed ones are under Maintenance Approvals.
+        $maintenances = Invoice::where('document_type_id', ($is_inspection?5:1))->whereIn('document_status',($is_inspection?['completed','draft']:['draft','pending']))
         ->where('company_id', auth()->user()->active_company())
         ->orderByDesc('id')
         ->paginate($perPage);
@@ -409,6 +410,8 @@ class MaintenanceController extends Controller
 			'vehicle_id' => ['required'],
 			'business_partner_id' => self::businessPartnerRules(),
 			'date' => ['required'],
+			'start_time' => ['required'],
+			'end_time' => ['required'],
 			'description' => ['nullable','string'],
 			'total_amount' => ['required'],
 			'grand_total_amount' => ['required'],
@@ -536,10 +539,15 @@ class MaintenanceController extends Controller
     {
         $is_inspection = $this->is_inspection;
         $company_id = auth()->user()->active_company();
-        $maintenance = Invoice::where('id',$id)->where('company_id', $company_id)
+        $deleted = Invoice::where('id',$id)->where('company_id', $company_id)
         ->where('document_type_id', ($is_inspection?5:1))
         ->where('document_status', 'draft')
         ->delete();
+
+        if (!$deleted) {
+            return redirect()->back()
+                ->with('error', 'Only draft '.($is_inspection?"inspection":"maintenance").' documents can be deleted.');
+        }
 
         return redirect()->back()
             ->with('success', ($is_inspection?"Inspection":"Maintenance").' deleted successfully');
